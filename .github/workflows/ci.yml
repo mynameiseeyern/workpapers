@@ -34,8 +34,8 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
           tags: |
-            ghcr.io/eeandrelle/workpapers:latest
-            ghcr.io/eeandrelle/workpapers:${{ github.sha }}
+            ghcr.io/mynameiseeyern/workpapers:latest
+            ghcr.io/mynameiseeyern/workpapers:${{ github.sha }}
       - name: Smoke test (migrations apply, health OK)
         run: |
           docker build -f infra/Dockerfile -t wp-smoke .

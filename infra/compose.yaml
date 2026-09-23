@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: ghcr.io/eeandrelle/workpapers:${WORKPAPERS_TAG:-latest}
+    image: ghcr.io/mynameiseeyern/workpapers:${WORKPAPERS_TAG:-latest}
     network_mode: service:tailscale   # no ports published on the LAN
     depends_on: [tailscale]
     volumes:

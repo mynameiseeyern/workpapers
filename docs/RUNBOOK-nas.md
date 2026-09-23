@@ -26,14 +26,14 @@ The app is only reachable on your tailnet, at `https://workpapers.<tailnet>.ts.n
 ## 3. First deploy
 1. Copy `infra/ts-serve.json` to `docker/workpapers/config/ts-serve.json`.
 2. Copy `infra/.env.example` to `docker/workpapers/.env` and paste the auth key.
-3. The image is private on GHCR: in Container Manager → Registry → Settings, add `ghcr.io` with user `eeandrelle` and a GitHub token with **read:packages** only.
+3. The image is private on GHCR: in Container Manager → Registry → Settings, add `ghcr.io` with user `mynameiseeyern` and a GitHub token with **read:packages** only.
 4. Container Manager → **Project** → Create → path `docker/workpapers` → upload `infra/compose.yaml` → Build/Start.
 5. In the Tailscale admin, the machine `workpapers` appears. Open `https://workpapers.<tailnet>.ts.net/_/` and create the PocketBase superuser (password manager!).
 6. In the admin UI: create two users (Ee, Darrelle) in `users`, then link each to its `people` record.
 7. Sign in at `https://workpapers.<tailnet>.ts.net` on a phone and use "Add to Home Screen".
 
 ## 4. Updates
-Push to `main` → CI builds `ghcr.io/eeandrelle/workpapers:latest` and `:<sha>`.
+Push to `main` → CI builds `ghcr.io/mynameiseeyern/workpapers:latest` and `:<sha>`.
 On the NAS: Container Manager → Project → workpapers → Action → **Build** (pulls and recreates). To roll back, set `WORKPAPERS_TAG=<previous sha>` in `.env` and rebuild. Migrations only move forward, so take a PocketBase backup before any release that adds one.
 
 ## 5. Restore drill (do once at M1, then yearly)
