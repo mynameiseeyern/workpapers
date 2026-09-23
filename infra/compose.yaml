@@ -1,5 +1,5 @@
 # Container Manager → Project → create from this file. Paths assume /volume1/docker/workpapers.
-# Reachable only on the tailnet: https://workpapers.<your-tailnet>.ts.net
+# Reachable only on the tailnet: https://workpapers.tail74ef01.ts.net
 name: workpapers
 services:
   tailscale:

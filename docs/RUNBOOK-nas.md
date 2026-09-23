@@ -1,7 +1,7 @@
 # Runbook: Workpapers on the Synology
 
 Target: DS1522+ (amd64) on DSM 7.4.1-90080, Container Manager, Tailscale in userspace mode.
-The app is only reachable on your tailnet, at `https://workpapers.<tailnet>.ts.net`.
+The app is only reachable on your tailnet (`tail74ef01.ts.net`), at `https://workpapers.tail74ef01.ts.net`.
 
 ## 0. Before anything
 1. Finish the DSM 7.4.1 update. Export the DSM config first (Control Panel → Update & Restore → Configuration Backup).
@@ -28,9 +28,9 @@ The app is only reachable on your tailnet, at `https://workpapers.<tailnet>.ts.n
 2. Copy `infra/.env.example` to `docker/workpapers/.env` and paste the auth key.
 3. The image is private on GHCR: in Container Manager → Registry → Settings, add `ghcr.io` with user `mynameiseeyern` and a GitHub token with **read:packages** only.
 4. Container Manager → **Project** → Create → path `docker/workpapers` → upload `infra/compose.yaml` → Build/Start.
-5. In the Tailscale admin, the machine `workpapers` appears. Open `https://workpapers.<tailnet>.ts.net/_/` and create the PocketBase superuser (password manager!).
+5. In the Tailscale admin, the machine `workpapers` appears. Open `https://workpapers.tail74ef01.ts.net/_/` and create the PocketBase superuser (password manager!).
 6. In the admin UI: create two users (Ee, Darrelle) in `users`, then link each to its `people` record.
-7. Sign in at `https://workpapers.<tailnet>.ts.net` on a phone and use "Add to Home Screen".
+7. Sign in at `https://workpapers.tail74ef01.ts.net` on a phone and use "Add to Home Screen".
 
 ## 4. Updates
 Push to `main` → CI builds `ghcr.io/mynameiseeyern/workpapers:latest` and `:<sha>`.
