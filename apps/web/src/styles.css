@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/* App shell — composed from HeroUI tokens only */
+html, body, #root { height: 100%; }
+body { @apply bg-background text-foreground antialiased; }

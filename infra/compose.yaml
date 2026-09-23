@@ -1,0 +1,25 @@
+# Container Manager → Project → create from this file. Paths assume /volume1/docker/workpapers.
+# Reachable only on the tailnet: https://workpapers.<your-tailnet>.ts.net
+name: workpapers
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: workpapers
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_USERSPACE: "true"            # DSM has no /dev/net/tun for containers; userspace mode is the supported path
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/ts-serve.json
+      TS_EXTRA_ARGS: --advertise-tags=tag:workpapers
+    volumes:
+      - /volume1/docker/workpapers/ts_state:/var/lib/tailscale
+      - /volume1/docker/workpapers/config:/config:ro
+    restart: unless-stopped
+
+  app:
+    image: ghcr.io/eeandrelle/workpapers:${WORKPAPERS_TAG:-latest}
+    network_mode: service:tailscale   # no ports published on the LAN
+    depends_on: [tailscale]
+    volumes:
+      - /volume1/docker/workpapers/pb_data:/pb/pb_data
+    restart: unless-stopped
