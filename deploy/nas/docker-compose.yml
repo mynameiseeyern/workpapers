@@ -10,6 +10,7 @@ services:
     hostname: workpapers
     environment:
       TS_AUTHKEY: PASTE_AUTH_KEY_HERE   # only used on first start; the NAS stays joined afterwards
+      TS_AUTH_ONCE: "true"              # log in only if not already signed in (the saved login lives in ts_state)
       TS_USERSPACE: "true"              # DSM containers have no TUN device; userspace mode is the supported path
       TS_STATE_DIR: /var/lib/tailscale
       TS_SERVE_CONFIG: /config/ts-serve.json
