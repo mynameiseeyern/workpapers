@@ -225,8 +225,10 @@ export function RecordsView({ e, section, scope, onEdit, onDelete, fileUrl }: {
                       </Table.Cell>
                       <Table.Cell className="tabular-nums">{section === "s08" ? "" : figuresOf(r)}</Table.Cell>
                       <Table.Cell className="whitespace-nowrap text-right">
-                        {onEdit && <Button size="sm" variant="ghost" onPress={() => onEdit(r)} aria-label="Edit">Edit</Button>}
-                        {onDelete && <Button size="sm" variant="ghost" onPress={() => onDelete(r)} aria-label="Delete" className="text-danger">Delete</Button>}
+                        {e.lockReason(r) ? <Chip size="sm" title={`${e.lockReason(r)}. Reopen it to change this record.`}>locked</Chip> : <>
+                          {onEdit && <Button size="sm" variant="ghost" onPress={() => onEdit(r)} aria-label="Edit">Edit</Button>}
+                          {onDelete && <Button size="sm" variant="ghost" onPress={() => onDelete(r)} aria-label="Delete" className="text-danger">Delete</Button>}
+                        </>}
                       </Table.Cell>
                     </Table.Row>
                   ))}

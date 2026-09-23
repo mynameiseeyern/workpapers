@@ -31,7 +31,7 @@ Decision (24 Sep 2026): no separate backup copy for now. PocketBase keeps nightl
 ## 4. Updates
 Container Manager only checks Docker Hub for image updates, and "Add from URL" rejects ghcr.io addresses. So:
 1. Push to `main`; wait for the Actions run to go green.
-2. Container Manager → Project → workpapers → Action → **Build**. With `pull_policy: always` in the compose file, Build downloads the newest image and recreates the app. Data in `pb_data` and the Tailscale login in `ts_state` are untouched.
+2. Container Manager → Project → workpapers → **Stop**, then Action → **Build** (Build is only available while the project is stopped). With `pull_policy: always` in the compose file, Build downloads the newest image and recreates the app. Data in `pb_data` and the Tailscale login in `ts_state` are untouched.
 3. Reload the app and check the version at the bottom of the sidebar matches the commit.
 
 If the project was created before `pull_policy: always` was added: Action → Stop → Clean, then Image → select `ghcr.io/mynameiseeyern/workpapers` → Delete, then Project → Action → Build (it downloads the image fresh).

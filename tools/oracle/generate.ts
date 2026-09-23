@@ -162,7 +162,7 @@ function randomLedger(seed: number): { ledger: Ledger; fy: number } {
       r.details = det; rows.push(r);
     }
   }
-  const settings: Ledger["settings"] = { applies: {}, abn: {}, psi: {}, rateOverrides: {}, ccCarry: {}, payg: {} };
+  const settings: Ledger["settings"] = { applies: {}, abn: {}, psi: {}, rateOverrides: {}, ccCarry: {}, payg: {}, bas: {}, returns: {}, help: {} };
   for (const o of PEOPLE) {
     settings.abn[o] = { gstRegistered: R() < 0.8, gstBasis: R() < 0.7 ? "cash" : "accrual", incomeBasis: R() < 0.7 ? "receipts" : "earnings" };
     settings.psi[`${fy}:${o}`] = pick(["", "notpsi", "psb", "applies"]);

@@ -27,9 +27,23 @@ export interface Settings {
   ccCarry: Record<string, Cents>;
   /** "fy:person:q1..q4" → PAYG instalment paid (T7). */
   payg: Record<string, Cents>;
+  /** "fy:person:q1..q4" → a BAS quarter's lodgment record. */
+  bas: Record<string, Lodgment>;
+  /** "fy:person" → a tax return's lodgment record. */
+  returns: Record<string, Lodgment>;
+  /** Per-person details by "fy:person": HELP balance. */
+  help: Record<string, Cents>;
 }
 
-export const emptySettings = (): Settings => ({ applies: {}, abn: {}, psi: {}, rateOverrides: {}, ccCarry: {}, payg: {} });
+export type LodgmentStatus = "open" | "lodged" | "reopened";
+export interface Lodgment {
+  status: LodgmentStatus;
+  /** Figures as lodged (BAS: sales, gstOnSales, gstOnPurchases, net; return: assessable, deductions, taxable, paid). */
+  figures?: Record<string, number> | null;
+  lodgedOn?: string;
+}
+
+export const emptySettings = (): Settings => ({ applies: {}, abn: {}, psi: {}, rateOverrides: {}, ccCarry: {}, payg: {}, bas: {}, returns: {}, help: {} });
 
 /** A person's ABN settings with defaults filled in (GST-registered, cash basis, income counts when received). */
 export const abnOf = (s: Settings, person: PersonId | null): AbnSettings => ({

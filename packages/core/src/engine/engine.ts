@@ -6,6 +6,8 @@ import { basDate, notYetDerived, rowFY, type AbnLookup } from "../rowyear";
 import { quartersOf, type FY, type Quarter } from "../years";
 import { abnOf, appliesKey, psiOf, type Ledger } from "./ledger";
 import { SCHEDULES, type Schedule } from "./schedules";
+import { lockOf, lockReason, type Lock, type LockContext } from "../locks/lockcore";
+import type { Lodgment } from "./ledger";
 
 /**
  * The calculation engine, ported from prototype v15. Pure: a ledger and a year in, figures out.
@@ -268,6 +270,38 @@ export class Engine {
     if (section === "s05") { const b = this.businessTotals(scope); return b.sales - b.expenses; }
     if (section in SCHEDULES) return this.rowsIn(section).length ? this.scheduleMain(section, scope) : null;
     return null;
+  }
+
+  // ---------- lodgment and locks ----------
+  basRecord(o: PersonId, i: number, fy: FY = this.fy): Lodgment | null { return this.ledger.settings.bas?.[`${fy}:${o}:q${i + 1}`] ?? null; }
+  returnRecord(o: PersonId, fy: FY = this.fy): Lodgment | null { return this.ledger.settings.returns?.[`${fy}:${o}`] ?? null; }
+  lockContext(): LockContext {
+    const s = this.ledger.settings;
+    return {
+      people: this.people,
+      incomeBasis: (o) => abnOf(s, o).incomeBasis,
+      gstBasis: (o) => abnOf(s, o).gstBasis,
+      basStatus: (o, fy, q) => s.bas?.[`${fy}:${o}:q${q}`]?.status ?? null,
+      returnStatus: (o, fy) => s.returns?.[`${fy}:${o}`]?.status ?? null,
+    };
+  }
+  /** The lodged BAS quarter or return that makes a row read-only, if any. */
+  lockOf(r: Pick<Row, "section" | "date" | "paid" | "owner" | "direction">): Lock | null {
+    return lockOf({ section: r.section, date: r.date, paid: r.paid, owner: r.owner, direction: r.direction }, this.lockContext());
+  }
+  lockReason(r: Pick<Row, "section" | "date" | "paid" | "owner" | "direction">): string | null {
+    const l = this.lockOf(r);
+    return l ? lockReason(l) : null;
+  }
+  /** Figures saved when a BAS quarter is marked lodged. */
+  basFigures(o: PersonId, i: number) {
+    const t = this.quarterBAS(this.quarters[i]!, o);
+    return { sales: t.sales, gstOnSales: t.gstOnSales, gstOnPurchases: t.gstOnPurchases, net: t.net };
+  }
+  /** Figures saved when a return is marked lodged. */
+  returnFigures(o: PersonId) {
+    const f = this.taxFigures(o);
+    return { assessable: f.assessable, deductions: f.deductions, taxable: f.taxable, paid: f.withheld + f.payg };
   }
 
   // ---------- one person's return ----------
