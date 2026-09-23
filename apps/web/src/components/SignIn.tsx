@@ -1,3 +1,4 @@
+import { APP_VERSION } from "../version";
 import { Alert, Button, Card, Form, Input, Label, TextField } from "@heroui/react";
 import { useState } from "react";
 import { pb } from "../data/pb";
@@ -20,7 +21,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   }
 
   return (
-    <main className="grid min-h-full place-items-center p-4">
+    <main className="flex min-h-full flex-col items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <Card.Header>
           <Card.Title>Workpapers</Card.Title>
@@ -46,6 +47,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           </Form>
         </Card.Content>
       </Card>
+      <p className="mt-3 text-center text-[11px] text-muted">Version {APP_VERSION}</p>
     </main>
   );
 }

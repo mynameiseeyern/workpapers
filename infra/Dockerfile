@@ -5,6 +5,8 @@
 FROM node:22-alpine AS web
 WORKDIR /src
 RUN corepack enable
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json ./
 COPY packages ./packages
 COPY apps ./apps

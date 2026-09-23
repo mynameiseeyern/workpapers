@@ -1,3 +1,4 @@
+import { APP_VERSION } from "../version";
 import { Button, Label, ListBox, Select, Separator, Tabs } from "@heroui/react";
 import { fyLabel } from "@workpapers/core";
 import { useState, type ReactNode } from "react";
@@ -71,6 +72,7 @@ export function AppShell(p: Props) {
               <span>Signed in as {pb.authStore.record?.["name"] || pb.authStore.record?.["email"]}</span>
               <Button size="sm" variant="ghost" onPress={p.onSignOut}>Sign out</Button>
             </div>
+            <div className="px-1 pt-1 text-[11px] text-muted" title="The commit this build came from">Version {APP_VERSION}</div>
           </div>
         </nav>
 

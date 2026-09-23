@@ -35,13 +35,15 @@ jobs:
           context: .
           file: infra/Dockerfile
           platforms: linux/amd64
+          build-args: |
+            APP_VERSION=${{ github.sha }}
           push: ${{ github.event_name == 'push' }}
           tags: |
             ghcr.io/mynameiseeyern/workpapers:latest
             ghcr.io/mynameiseeyern/workpapers:${{ github.sha }}
       - name: Smoke test (migrations apply, health OK)
         run: |
-          docker build -f infra/Dockerfile -t wp-smoke .
+          docker build -f infra/Dockerfile --build-arg APP_VERSION=${{ github.sha }} -t wp-smoke .
           docker run -d --name wp -p 8090:8090 wp-smoke
           for i in $(seq 1 20); do curl -fs http://127.0.0.1:8090/api/health && break; sleep 1; done
           curl -fs http://127.0.0.1:8090/api/health
