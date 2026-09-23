@@ -4,19 +4,32 @@ import { formatMoney, fyLabel } from "@workpapers/core";
 import { useState, type ReactNode } from "react";
 import { SECTIONS, type Group } from "../data/sections";
 import { pb } from "../data/pb";
+import type { NavState } from "../data/navigation";
 
 interface Props {
   view: string; fy: number; person: string; years: number[]; people: string[];
   onNavigate: (view: string) => void; onYear: (fy: number) => void; onPerson: (p: string) => void;
   onSignOut: () => void; children: ReactNode;
-  example: boolean; onExample: (on: boolean) => void; totals: Record<string, number | null>;
+  example: boolean; onExample: (on: boolean) => void; nav?: NavState;
 }
 const GROUPS: Group[] = ["", "Income", "Business", "Deductions", "Other", "Tools"];
 
 export function AppShell(p: Props) {
   const [navOpen, setNavOpen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const totals = p.nav?.totals ?? {};
+  const shown = (id: string) => !p.nav || p.nav.visible.has(id);
+  const more = p.nav?.more ?? [];
   const current = SECTIONS.find((s) => s.id === p.view);
   const go = (id: string) => { p.onNavigate(id); setNavOpen(false); };
+
+  const navItem = (s: (typeof SECTIONS)[number], muted: boolean) => (
+    <button key={s.id} type="button" onClick={() => go(s.id)} aria-current={p.view === s.id ? "page" : undefined}
+      className={`flex w-full items-center rounded-2xl px-2.5 py-1.5 text-left text-sm ${s.parent ? "pl-7 text-[13px]" : ""} ${muted ? "text-muted" : ""} ${p.view === s.id ? "bg-accent-soft font-semibold text-accent-soft-foreground" : "hover:bg-surface-secondary"}`}>
+      <span className="flex-1">{s.name}</span>
+      {!muted && totals[s.id] != null && <span className="ml-2 text-xs tabular-nums text-muted">{formatMoney(totals[s.id]!).replace(/\.\d\d$/, "")}</span>}
+    </button>
+  );
 
   return (
     <div className="flex min-h-full flex-col">
@@ -58,18 +71,22 @@ export function AppShell(p: Props) {
 
           <div className={`${navOpen ? "flex" : "hidden"} mt-3 flex-1 flex-col md:flex`}>
             {GROUPS.map((g) => {
-              const items = SECTIONS.filter((s) => s.group === g && !s.hidden);
-              if (!items.length) return null;
+              const items = SECTIONS.filter((s) => s.group === g && !s.hidden && shown(s.id));
+              const moreHere = g === "Tools" && more.length > 0;
+              if (!items.length && !moreHere) return null;
               return (
                 <div key={g || "top"} className="mb-2">
-                  {g && <div className="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted uppercase">{g}</div>}
-                  {items.map((s) => (
-                    <button key={s.id} type="button" onClick={() => go(s.id)} aria-current={p.view === s.id ? "page" : undefined}
-                      className={`flex w-full items-center rounded-2xl px-2.5 py-1.5 text-left text-sm ${s.parent ? "pl-7 text-[13px]" : ""} ${p.view === s.id ? "bg-accent-soft font-semibold text-accent-soft-foreground" : "hover:bg-surface-secondary"}`}>
-                      <span className="flex-1">{s.name}</span>
-                      {p.totals[s.id] != null && <span className="ml-2 text-xs tabular-nums text-muted">{formatMoney(p.totals[s.id]!).replace(/\.\d\d$/, "")}</span>}
-                    </button>
-                  ))}
+                  {moreHere && (
+                    <div className="mb-2">
+                      <button type="button" onClick={() => setShowMore((v) => !v)} aria-expanded={showMore}
+                        className="w-full rounded-2xl px-2.5 py-1.5 text-left text-sm text-muted hover:bg-surface-secondary">
+                        {showMore ? "− Hide empty schedules" : `+ ${more.length} more schedule${more.length === 1 ? "" : "s"}`}
+                      </button>
+                      {showMore && SECTIONS.filter((s) => more.includes(s.id)).map((s) => navItem(s, true))}
+                    </div>
+                  )}
+                  {g && items.length > 0 && <div className="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted uppercase">{g}</div>}
+                  {items.map((s) => navItem(s, false))}
                 </div>
               );
             })}

@@ -1,12 +1,14 @@
 import { Alert, Card, Spinner } from "@heroui/react";
-import { Engine, fyLabel, type Ledger } from "@workpapers/core";
+import { Engine, fyLabel, type SectionId } from "@workpapers/core";
+import type { LoadedLedger } from "../data/ledger";
 import { sectionById } from "../data/sections";
-import { BasCard, FlowCard, RecordsView, ReturnCard } from "./Figures";
+import { BasCard, FlowCard, ReturnCard } from "./Figures";
+import { SectionPage } from "./SectionPage";
 import { Placeholder } from "./Placeholder";
 
 interface Props {
   view: string; fy: number; person: string; example: boolean;
-  ledger: Ledger | undefined; loading: boolean; error: unknown;
+  loaded: LoadedLedger | undefined; loading: boolean; error: unknown; years: number[];
   onNavigate: (id: string) => void;
 }
 
@@ -24,7 +26,7 @@ export function Workspace(p: Props) {
     </div>
   );
   if (p.loading) return <div className="flex max-w-4xl flex-col gap-4">{title}<Spinner /></div>;
-  if (p.error || !p.ledger) {
+  if (p.error || !p.loaded) {
     return (
       <div className="flex max-w-4xl flex-col gap-4">{title}
         <Alert status="danger"><Alert.Indicator /><Alert.Content>
@@ -33,7 +35,7 @@ export function Workspace(p: Props) {
       </div>
     );
   }
-  const e = new Engine(p.ledger, p.fy);
+  const e = new Engine(p.loaded.ledger, p.fy);
   const scope = p.person === "Household" ? e.people : [p.person];
   const basPeople = e.abnHolders(scope).filter((o) => e.gstRegistered(o));
 
@@ -53,8 +55,8 @@ export function Workspace(p: Props) {
       <Card><Card.Header><Card.Title>No BAS this year</Card.Title>
         <Card.Description>A BAS appears here for anyone with GST-registered business income in {fyLabel(p.fy)}.</Card.Description></Card.Header></Card>
     );
-  } else if (s && s.group && s.group !== "Tools" && s.id !== "s08") {
-    body = <RecordsView e={e} section={p.view} scope={scope} />;
+  } else if (s && s.group && s.group !== "Tools") {
+    body = <SectionPage key={`${p.view}-${p.fy}`} e={e} loaded={p.loaded} section={p.view as SectionId} scope={scope} person={p.person} years={p.years} />;
   } else {
     return <Placeholder view={p.view} fy={p.fy} person={p.person} />;
   }

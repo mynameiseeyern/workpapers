@@ -1,4 +1,4 @@
-import { Card, Chip, Table } from "@heroui/react";
+import { Button, Card, Chip, Table } from "@heroui/react";
 import { formatMoney, fyLabel, SCHEDULES, type Engine, type Row, type SectionId } from "@workpapers/core";
 import { sectionById, SECTIONS } from "../data/sections";
 
@@ -134,29 +134,78 @@ function describe(r: Row): string {
   return [r.party ?? (d.party as string | undefined), r.description, r.category ?? r.bizCategory].filter(Boolean).join(" — ");
 }
 
-export function RecordsView({ e, section, scope }: { e: Engine; section: string; scope: string[] }) {
+function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="min-w-[8rem]">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
+      {note && <div className="text-xs text-muted">{note}</div>}
+    </div>
+  );
+}
+
+/** The totals block at the top of a schedule. */
+export function SectionTotals({ e, section, scope }: { e: Engine; section: string; scope: string[] }) {
+  const stats: { label: string; value: string; note?: string }[] = [];
+  if (section === "s05") {
+    const b = e.businessTotals(scope);
+    const reg = scope.some((o) => e.gstRegistered(o));
+    stats.push({ label: reg ? "Income (excl. GST)" : "Income", value: m(b.sales) }, { label: reg ? "Expenses (excl. GST)" : "Expenses", value: m(b.expenses),
+      note: b.homeOffice ? `incl. ${m(b.homeOffice)} home office` : undefined }, { label: "Net business income", value: m(b.sales - b.expenses) });
+    if (b.unpaidIncome) stats.push({ label: "Not received yet", value: m(b.unpaidIncome), note: "counts once paid" });
+    if (b.poolTotal) stats.push({ label: "Assets for the agent", value: m(b.poolTotal), note: "over the instant write-off limit" });
+    if (b.psiDeniedTotal) stats.push({ label: "Excluded under PSI", value: m(b.psiDeniedTotal) });
+  } else if (section === "s07") {
+    const d = e.deductionTotals(scope), w = e.wfhTotals(scope);
+    stats.push({ label: "Claimed outright", value: m(d.total) }, { label: "Working from home", value: m(w.claim), note: `${w.hours} h at ${Math.round(w.rate * 100)}c` });
+    if (d.depr.length) stats.push({ label: "Decline in value", value: m(d.deprTotal), note: `${d.depr.length} over $300 — for the agent` });
+    if (d.overlap.length) stats.push({ label: "Inside the WFH rate", value: String(d.overlap.length), note: "phone & internet not claimed twice" });
+    if (d.missing) stats.push({ label: "Without evidence", value: String(d.missing) });
+  } else if (section === "s07a") {
+    const w = e.wfhTotals(scope);
+    stats.push({ label: "Employment", value: m(w.claim), note: `${w.hours} h at ${Math.round(w.rate * 100)}c` },
+      { label: "Business", value: m(w.bizClaim), note: `${w.bizHours} h — goes to business expenses` });
+  } else if (SCHEDULES[section]) {
+    const g = SCHEDULES[section]!, t = e.scheduleTotals(section as SectionId, scope);
+    stats.push({ label: "Total", value: m(e.scheduleMain(section as SectionId, scope)) });
+    for (const f of g.fields.filter((x) => x.t === "money" && !g.tax.income?.includes(x.k) && x.k !== g.tax.ded)) {
+      const v = Number(t.values[f.k] ?? 0);
+      if (v) stats.push({ label: f.l, value: m(v) });
+    }
+    if (section === "d01") stats.push({ label: "Kilometres", value: String(t.values.km ?? 0), note: t.values.over ? `capped at 5,000` : undefined });
+    if (g.rowOk && t.count - t.ok) stats.push({ label: "Not counted yet", value: String(t.count - t.ok), note: g.okText });
+    if (t.missing) stats.push({ label: "Without evidence", value: String(t.missing) });
+  }
+  if (!stats.length) return null;
+  return <div className="flex flex-wrap gap-x-8 gap-y-3">{stats.map((x) => <Stat key={x.label} {...x} />)}</div>;
+}
+
+export function RecordsView({ e, section, scope, onEdit, onDelete, fileUrl }: {
+  e: Engine; section: string; scope: string[];
+  onEdit?: (r: Row) => void; onDelete?: (r: Row) => void; fileUrl?: (r: Row, name: string) => string;
+}) {
   const s = sectionById(section);
   const rows = e.rowsIn(section as SectionId)
     .filter((r) => scope.some((o) => e.shareOf(r, o) > 0))
     .sort((a, b) => b.date.localeCompare(a.date));
-  const total = e.sectionTotal(section as SectionId, scope);
   const who = (r: Row) => (r.owner ?? `Shared ${r.sharePct ?? 50}/${100 - (r.sharePct ?? 50)}`);
+  const files = (r: Row) => ((r as Row & { files?: string[] }).files ?? []);
   return (
     <Card>
       <Card.Header>
-        <Card.Title>{rows.length} {rows.length === 1 ? "record" : "records"}{total != null && <span className="ml-2 font-normal text-muted">· total {m(total)}</span>}</Card.Title>
-        {SCHEDULES[section]?.sub && <Card.Description>{SCHEDULES[section]!.sub}</Card.Description>}
+        <Card.Title>{rows.length} {rows.length === 1 ? "record" : "records"} in {fyLabel(e.fy)}</Card.Title>
       </Card.Header>
       <Card.Content>
-        {rows.length === 0 ? <p className="text-sm text-muted">No records for this year.</p> : (
+        {rows.length === 0 ? <p className="text-sm text-muted">No records for this year yet.</p> : (
           <Table>
             <Table.ScrollContainer>
-              <Table.Content aria-label={`${s?.name} records`} className="min-w-[560px]">
+              <Table.Content aria-label={`${s?.name} records`} className="min-w-[600px]">
                 <Table.Header>
                   <Table.Column isRowHeader>Date</Table.Column>
                   <Table.Column>Who</Table.Column>
                   <Table.Column>Description</Table.Column>
                   <Table.Column>Figures</Table.Column>
+                  <Table.Column className="w-24"> </Table.Column>
                 </Table.Header>
                 <Table.Body>
                   {rows.map((r) => (
@@ -164,11 +213,21 @@ export function RecordsView({ e, section, scope }: { e: Engine; section: string;
                       <Table.Cell className="whitespace-nowrap">{shortDate(r.date)}</Table.Cell>
                       <Table.Cell className="whitespace-nowrap">{who(r)}</Table.Cell>
                       <Table.Cell>
-                        {describe(r) || "—"}
-                        {r.section === "s05" && r.direction === "income" && r.paid === "" && <Chip size="sm" color="warning" className="ml-2">unpaid</Chip>}
-                        {!r.evidenced && r.section !== "s07a" && <Chip size="sm" color="warning" className="ml-2">no evidence</Chip>}
+                        {section === "s08" ? r.description : describe(r) || "—"}
+                        {r.section === "s05" && r.direction === "income" && r.paid === "" && <Chip size="sm" color="warning" className="ml-2">not received</Chip>}
+                        {r.section === "s05" && r.direction !== "income" && r.paid === "" && <Chip size="sm" color="warning" className="ml-2">not paid</Chip>}
+                        {!r.evidenced && r.section !== "s07a" && r.section !== "s08" && <Chip size="sm" color="warning" className="ml-2">no evidence</Chip>}
+                        {fileUrl && files(r).map((f) => (
+                          <a key={f} href={fileUrl(r, f)} target="_blank" rel="noreferrer" className="ml-2 text-xs text-accent underline">
+                            {f.replace(/_[a-z0-9]{10}(\.[a-z0-9]+)$/i, "$1")}
+                          </a>
+                        ))}
                       </Table.Cell>
-                      <Table.Cell className="tabular-nums">{figuresOf(r)}</Table.Cell>
+                      <Table.Cell className="tabular-nums">{section === "s08" ? "" : figuresOf(r)}</Table.Cell>
+                      <Table.Cell className="whitespace-nowrap text-right">
+                        {onEdit && <Button size="sm" variant="ghost" onPress={() => onEdit(r)} aria-label="Edit">Edit</Button>}
+                        {onDelete && <Button size="sm" variant="ghost" onPress={() => onDelete(r)} aria-label="Delete" className="text-danger">Delete</Button>}
+                      </Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>

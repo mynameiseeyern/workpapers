@@ -1,11 +1,11 @@
-import { Engine, fyOf, type SectionId } from "@workpapers/core";
+import { Engine, fyOf } from "@workpapers/core";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { SignIn } from "./components/SignIn";
 import { pb } from "./data/pb";
 import { useUrlState } from "./data/useUrlState";
-import { useLedger } from "./data/ledger";
-import { SECTIONS } from "./data/sections";
+import { useLedger, useLiveUpdates } from "./data/ledger";
+import { navState } from "./data/navigation";
 import { Workspace } from "./routes/Workspace";
 
 const todayISO = () => new Date().toLocaleDateString("en-CA");
@@ -26,12 +26,12 @@ export function App() {
   }, [signedIn]);
 
   const ledger = useLedger(url.data, url.fy, people, signedIn);
-  const totals = useMemo(() => {
-    if (!ledger.data) return {};
-    const e = new Engine(ledger.data, url.fy);
-    const scope = url.person === "Household" ? e.people : [url.person];
-    return Object.fromEntries(SECTIONS.map((s) => [s.id, s.group && s.group !== "Tools" ? e.sectionTotal(s.id as SectionId, scope) : null]));
-  }, [ledger.data, url.fy, url.person]);
+  useLiveUpdates(signedIn && url.data === "ours");
+  const nav = useMemo(() => {
+    if (!ledger.data) return undefined;
+    const e = new Engine(ledger.data.ledger, url.fy);
+    return navState(e, url.person === "Household" ? e.people : [url.person], url.view);
+  }, [ledger.data, url.fy, url.person, url.view]);
 
   if (!signedIn) return <SignIn onSignedIn={() => setSignedIn(true)} />;
 
@@ -41,10 +41,10 @@ export function App() {
       view={url.view} fy={url.fy} person={url.person} years={years} people={people}
       onNavigate={(view) => setUrl({ view })} onYear={(fy) => setUrl({ fy })} onPerson={(person) => setUrl({ person })}
       onSignOut={() => pb.authStore.clear()}
-      example={url.data === "example"} onExample={(on) => setUrl({ data: on ? "example" : "ours" })} totals={totals}
+      example={url.data === "example"} onExample={(on) => setUrl({ data: on ? "example" : "ours" })} nav={nav}
     >
       <Workspace view={url.view} fy={url.fy} person={url.person} example={url.data === "example"}
-        ledger={ledger.data} loading={ledger.isLoading} error={ledger.error} onNavigate={(view) => setUrl({ view })} />
+        loaded={ledger.data} loading={ledger.isLoading} error={ledger.error} years={years} onNavigate={(view) => setUrl({ view })} />
     </AppShell>
   );
 }

@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { emptySettings, exampleLedger, type Ledger, type Row, type SectionId } from "@workpapers/core";
 import type { RecordModel } from "pocketbase";
 import { pb } from "./pb";
@@ -8,8 +9,15 @@ export type DataMode = "ours" | "example";
 const day = (v: unknown): string => (typeof v === "string" ? v.slice(0, 10) : "");
 const num = (v: unknown): number | undefined => (v === null || v === undefined || v === "" ? undefined : Number(v));
 
+/** What the app keeps about a stored row beyond what the engine needs. */
+export interface StoredRow extends Row {
+  files: string[];
+  evidenceTick: boolean;
+  record: RecordModel;
+}
+
 /** A PocketBase `rows` record → an engine row. People are referred to by name inside the engine. */
-function toRow(r: RecordModel, nameOf: Map<string, string>): Row {
+function toRow(r: RecordModel, nameOf: Map<string, string>): StoredRow {
   const owner = r["shared"] ? null : nameOf.get(r["owner"] as string) ?? null;
   return {
     id: r.id,
@@ -22,19 +30,24 @@ function toRow(r: RecordModel, nameOf: Map<string, string>): Row {
     gst: Number(r["gst_cents"]) || 0,
     noGst: !!r["no_gst"],
     direction: (r["direction"] || undefined) as Row["direction"],
-    apportion: num(r["apportion"]),
+    apportion: r["direction"] === "expense" ? num(r["apportion"]) : undefined,
     category: (r["category"] as string) || undefined,
     bizCategory: (r["biz_category"] as string) || undefined,
     use: (r["use"] || undefined) as Row["use"],
     hours: num(r["hours"]),
     party: (r["party"] as string) || undefined,
     description: (r["description"] as string) || undefined,
-    evidenced: !!r["evidenced"],
+    evidenced: ((r["files"] as string[]) ?? []).length > 0 || !!r["evidence_tick"],
     details: (r["details"] as Record<string, unknown>) ?? undefined,
+    files: (r["files"] as string[]) ?? [],
+    evidenceTick: !!r["evidence_tick"],
+    record: r,
   };
 }
 
-async function loadOurs(fy: number): Promise<Ledger> {
+export interface LoadedLedger { ledger: Ledger; peopleIds: Record<string, string>; editable: boolean }
+
+async function loadOurs(fy: number): Promise<LoadedLedger> {
   const people = await pb.collection("people").getFullList({ sort: "sort" });
   const nameOf = new Map(people.map((p) => [p.id, p["name"] as string]));
   const [rows, abn, years, personYears, quarters] = await Promise.all([
@@ -64,15 +77,34 @@ async function loadOurs(fy: number): Promise<Ledger> {
     const o = nameOf.get(q["person"] as string);
     if (o && q["payg_cents"]) settings.payg[`${fy}:${o}:q${q["q"]}`] = q["payg_cents"];
   }
-  return { people: people.map((p) => p["name"] as string), rows: rows.map((r) => toRow(r, nameOf)), settings };
+  return {
+    ledger: { people: people.map((p) => p["name"] as string), rows: rows.map((r) => toRow(r, nameOf)), settings },
+    peopleIds: Object.fromEntries(people.map((p) => [p["name"] as string, p.id])),
+    editable: true,
+  };
 }
 
 /** The ledger for a year: our records from PocketBase, or the made-up example year (never saved). */
 export function useLedger(mode: DataMode, fy: number, people: string[], enabled = true) {
   return useQuery({
     queryKey: ["ledger", mode, fy, people.join("|")],
-    queryFn: async () => (mode === "example" ? exampleLedger([people[0] ?? "Person A", people[1] ?? "Person B"], fy) : loadOurs(fy)),
+    queryFn: async (): Promise<LoadedLedger> =>
+      mode === "example"
+        ? { ledger: exampleLedger([people[0] ?? "Person A", people[1] ?? "Person B"], fy), peopleIds: {}, editable: false }
+        : loadOurs(fy),
     staleTime: mode === "example" ? Infinity : 10_000,
     enabled,
   });
+}
+
+/** Refresh when anyone changes a row or a setting (the other person, another device). */
+export function useLiveUpdates(enabled: boolean) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    const refresh = () => void qc.invalidateQueries({ queryKey: ["ledger", "ours"] });
+    const names = ["rows", "abn_settings", "year_settings", "person_year", "bas_quarters"];
+    const subs = names.map((n) => pb.collection(n).subscribe("*", refresh).catch(() => () => Promise.resolve()));
+    return () => { subs.forEach((s) => s.then((unsub) => unsub()).catch(() => {})); };
+  }, [enabled, qc]);
 }
