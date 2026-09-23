@@ -16,12 +16,8 @@ The app is only reachable on your tailnet (`tail74ef01.ts.net`), at `https://wor
 4. Install Tailscale on each phone and laptop you'll use and sign in. Invite Darrelle (Users → Invite).
 5. Settings → Keys → **Generate auth key**: not reusable, not ephemeral, tag `tag:workpapers`. Keep it for step 3.
 
-## 2. Backups (no cloud copy, by choice)
-1. **Snapshots:** Package Center → install **Snapshot Replication** → Snapshots → select the `docker` share → Settings → schedule hourly, retention: keep 48 hourly + 30 daily. Protects against mistakes and bad updates.
-2. **USB drive:** plug in an external drive (any size; Workpapers is small). Hyper Backup → + → Data backup task → Folders and Packages → **Local folder & USB** → the drive → tick `docker/workpapers` only.
-3. Settings: task name `Workpapers USB`, daily 02:30, integrity check weekly, **client-side encryption on** (password in the password manager and on paper; download the key file). Rotation: Smart Recycle, 30 versions.
-4. Keep the drive away from the NAS (another room at minimum; ideally two drives swapped monthly with one kept off the premises). Fire or theft that takes the NAS shouldn't take the backup too.
-5. PocketBase also keeps its own nightly backup inside `pb_data/backups` (set in the admin UI: Settings → Backups → daily, keep 7); it's included in the USB backup.
+## 2. Backups
+Decision (24 Sep 2026): no separate backup copy for now. PocketBase keeps nightly backups inside `pb_data/backups` on the NAS (admin UI → Settings → Backups → daily, keep 7). Save each year's agent pack off the NAS. If this changes, the options are Snapshot Replication (hourly snapshots of `docker`) and Hyper Backup to an encrypted USB drive.
 
 ## 3. First deploy
 1. Copy `infra/ts-serve.json` to `docker/workpapers/config/ts-serve.json`.
