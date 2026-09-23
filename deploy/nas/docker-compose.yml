@@ -21,6 +21,7 @@ services:
 
   app:
     image: ghcr.io/mynameiseeyern/workpapers:latest
+    pull_policy: always                 # every Build downloads the newest version (Container Manager can't check GitHub for updates)
     container_name: workpapers-app
     network_mode: service:tailscale     # reachable only through Tailscale; nothing opened on the home network
     depends_on:

@@ -29,8 +29,13 @@ Decision (24 Sep 2026): no separate backup copy for now. PocketBase keeps nightl
 7. Sign in at `https://workpapers.tail74ef01.ts.net` on a phone and use "Add to Home Screen".
 
 ## 4. Updates
-Push to `main` → CI builds `ghcr.io/mynameiseeyern/workpapers:latest` and `:<sha>`.
-On the NAS: Container Manager → Project → workpapers → Action → **Build** (pulls and recreates). To roll back, set `WORKPAPERS_TAG=<previous sha>` in `.env` and rebuild. Migrations only move forward, so take a PocketBase backup before any release that adds one.
+Container Manager only checks Docker Hub for image updates, and "Add from URL" rejects ghcr.io addresses. So:
+1. Push to `main`; wait for the Actions run to go green.
+2. Container Manager → Project → workpapers → Action → **Build**. With `pull_policy: always` in the compose file, Build downloads the newest image and recreates the app. Data in `pb_data` and the Tailscale login in `ts_state` are untouched.
+3. Reload the app and check the version at the bottom of the sidebar matches the commit.
+
+If the project was created before `pull_policy: always` was added: Action → Stop → Clean, then Image → select `ghcr.io/mynameiseeyern/workpapers` → Delete, then Project → Action → Build (it downloads the image fresh).
+To roll back, change `latest` to a previous commit's full SHA tag and Build.
 
 ## 5. Restore drill (do once at M1, then yearly)
 1. Stop the project.
