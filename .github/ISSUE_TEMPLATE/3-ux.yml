@@ -1,0 +1,16 @@
+name: UX / flow
+description: How something works — too many steps, confusing order, behaviour
+title: "[UX] "
+labels: [ux]
+body:
+  - type: textarea
+    id: goal
+    attributes: { label: "What were you trying to do?" }
+    validations: { required: true }
+  - type: textarea
+    id: friction
+    attributes: { label: "Where did it get in the way?" }
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes: { label: "Any idea how it should work? (optional)" }

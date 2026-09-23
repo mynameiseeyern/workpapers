@@ -1,0 +1,17 @@
+name: Feature request
+description: Something new
+title: "[Feature] "
+labels: [feature]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: "What problem would it solve?" }
+    validations: { required: true }
+  - type: dropdown
+    id: often
+    attributes:
+      label: "How often does this come up?"
+      options: ["Every week", "Every month", "Every quarter (BAS)", "Once a year (tax time)", "Rarely"]
+  - type: textarea
+    id: idea
+    attributes: { label: "What might it look like? (optional)" }

@@ -1,0 +1,20 @@
+name: Bug
+description: Something's wrong or broken
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: did
+    attributes: { label: "What were you doing?", placeholder: "e.g. adding a business expense on my phone" }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: "What did you expect?" }
+    validations: { required: true }
+  - type: textarea
+    id: happened
+    attributes: { label: "What happened instead?", description: "Please don't paste real dollar amounts or personal details." }
+    validations: { required: true }
+  - type: input
+    id: page
+    attributes: { label: "Page or section", placeholder: "e.g. Business income & expenses, FY 2026–27" }

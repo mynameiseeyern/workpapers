@@ -1,0 +1,13 @@
+name: UI
+description: How something looks — layout, spacing, wording, colour, phone layout
+title: "[UI] "
+labels: [ui]
+body:
+  - type: input
+    id: where
+    attributes: { label: "Where", placeholder: "e.g. Overview, the to-do card" }
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes: { label: "What looks off, and how should it look?" }
+    validations: { required: true }

@@ -1,5 +1,5 @@
 import { Engine, fyOf } from "@workpapers/core";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { SignIn } from "./components/SignIn";
 import { pb } from "./data/pb";
@@ -7,6 +7,8 @@ import { useUrlState } from "./data/useUrlState";
 import { useLedger, useLiveUpdates } from "./data/ledger";
 import { navState } from "./data/navigation";
 import { Workspace } from "./routes/Workspace";
+// Agentation is large; load it only when feedback mode is switched on.
+const FeedbackMode = lazy(() => import("./components/FeedbackMode").then((m) => ({ default: m.FeedbackMode })));
 
 const todayISO = () => new Date().toLocaleDateString("en-CA");
 
@@ -16,6 +18,7 @@ export function App() {
   const defaults = useMemo(() => ({ view: "overview", fy: currentFY, person: "Household", data: "ours" as const }), [currentFY]);
   const [url, setUrl] = useUrlState(defaults);
   const [people, setPeople] = useState<string[]>(["Ee", "Darrelle"]);
+  const [feedback, setFeedback] = useState(false);
 
   useEffect(() => pb.authStore.onChange(() => setSignedIn(pb.authStore.isValid)), []);
   useEffect(() => {
@@ -37,14 +40,17 @@ export function App() {
 
   const years = Array.from({ length: 6 }, (_, i) => currentFY - i);
   return (
+    <>
     <AppShell
       view={url.view} fy={url.fy} person={url.person} years={years} people={people}
       onNavigate={(view) => setUrl({ view })} onYear={(fy) => setUrl({ fy })} onPerson={(person) => setUrl({ person })}
       onSignOut={() => pb.authStore.clear()}
-      example={url.data === "example"} onExample={(on) => setUrl({ data: on ? "example" : "ours" })} nav={nav}
+      feedback={feedback} onFeedback={setFeedback} example={url.data === "example"} onExample={(on) => setUrl({ data: on ? "example" : "ours" })} nav={nav}
     >
       <Workspace view={url.view} fy={url.fy} person={url.person} example={url.data === "example"}
         loaded={ledger.data} loading={ledger.isLoading} error={ledger.error} years={years} onNavigate={(view) => setUrl({ view })} />
     </AppShell>
+    {feedback && url.data === "ours" && <Suspense fallback={null}><FeedbackMode onClose={() => setFeedback(false)} /></Suspense>}
+    </>
   );
 }

@@ -1,0 +1,22 @@
+name: labels
+# Creates or updates the issue labels used by feedback and the Claude workflow. Runs when this file changes, or by hand.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/labels.yml]
+  workflow_dispatch:
+permissions:
+  issues: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
+    steps:
+      - run: |
+          gh label create bug        --color d73a4a --description "Something's wrong or broken" --force
+          gh label create ui         --color 1d76db --description "How it looks" --force
+          gh label create ux         --color 5319e7 --description "How it works: flow and behaviour" --force
+          gh label create feature    --color 0e8a16 --description "Something new" --force
+          gh label create feedback   --color c5def5 --description "Sent from the app's feedback mode" --force
+          gh label create claude     --color d4a373 --description "Hand this issue to Claude" --force
+          gh label create needs-info --color fbca04 --description "Needs more detail before work starts" --force

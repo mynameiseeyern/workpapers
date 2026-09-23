@@ -11,6 +11,7 @@ interface Props {
   onNavigate: (view: string) => void; onYear: (fy: number) => void; onPerson: (p: string) => void;
   onSignOut: () => void; children: ReactNode;
   example: boolean; onExample: (on: boolean) => void; nav?: NavState;
+  feedback: boolean; onFeedback: (on: boolean) => void;
 }
 const GROUPS: Group[] = ["", "Income", "Business", "Deductions", "Other", "Tools"];
 
@@ -95,7 +96,10 @@ export function AppShell(p: Props) {
               <span>Signed in as {pb.authStore.record?.["name"] || pb.authStore.record?.["email"]}</span>
               <Button size="sm" variant="ghost" onPress={p.onSignOut}>Sign out</Button>
             </div>
-            <div className="px-1 pt-1 text-[11px] text-muted" title="The commit this build came from">Version {APP_VERSION}</div>
+            <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-muted">
+              <span title="The commit this build came from">Version {APP_VERSION}</span>
+              {!p.example && <Button size="sm" variant="ghost" onPress={() => p.onFeedback(!p.feedback)}>{p.feedback ? "Stop feedback" : "Give feedback"}</Button>}
+            </div>
           </div>
         </nav>
 

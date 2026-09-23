@@ -47,3 +47,18 @@ To roll back, change `latest` to a previous commit's full SHA tag and Build.
 - **Machine never appears in Tailscale**: the auth key was used or expired; generate a new one and clear `ts_state`.
 - **HTTPS error**: HTTPS Certificates is off in the Tailscale DNS page, or the first cert is still being issued (up to a minute).
 - **Blank page**: check the `app` container log; a failed migration stops PocketBase from serving.
+
+## 6. Feedback → GitHub → Claude
+1. **Connect the NAS to GitHub (once).** On github.com: Settings → Developer settings → Fine-grained tokens → Generate:
+   repository access *Only select repositories → workpapers*, permission **Issues: Read and write**, expiry 1 year.
+   In the app's admin (`https://workpapers.tail74ef01.ts.net/_/`) → **app_secrets** → New record twice:
+   `github_token` = the token, `github_repo` = `mynameiseeyern/workpapers`.
+2. **Create the labels (once).** GitHub → Actions → **labels** → Run workflow.
+3. **Connect Claude (once).** On your Mac run `claude setup-token` (uses Claude Max), then GitHub → workpapers → Settings →
+   Secrets and variables → Actions → New repository secret `CLAUDE_CODE_OAUTH_TOKEN`. Install the Claude GitHub App
+   (https://github.com/apps/claude) on the workpapers repo.
+4. **Use it.** In the app: sidebar → **Give feedback** → pick Bug / UI / UX / Feature → click or drag on the page, write a note →
+   **Send** (paper-plane in the toolbar). An issue appears on GitHub. Add the **claude** label to hand it to Claude, or comment
+   `@claude …`. Bugs and UI come back as a branch with a pull request link; UX gets a plan first (reply `@claude go ahead`);
+   features get a short spec. Merge the pull request, wait for the build, then Stop → Build on the NAS.
+5. If GitHub isn't connected or rejects the token, feedback is still saved on the NAS (admin → **feedback**), with the error.
