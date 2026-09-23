@@ -1,0 +1,2107 @@
+
+</head>
+<body>
+
+<header>
+  <h1>Workpapers</h1>
+  <span class="spacer"></span>
+  <div class="tabs__list-container" role="group" aria-label="Whose workpapers"><div class="tabs__list" id="who" data-orientation="horizontal"></div></div>
+</header>
+
+<div class="layout">
+  <nav>
+    <div class="navtop">
+      <label class="navlabel" for="fy" style="display:block;padding-top:0">Financial year</label>
+      <select class="input input--secondary input input--secondary" id="fy" class="fysel" aria-label="Financial year"></select>
+      <button class="button button--secondary button--sm navtoggle" id="navtoggle" aria-expanded="false" aria-controls="nav"><span id="navcur">Sections</span> ▾</button>
+    </div>
+    <div id="nav"></div>
+    <div class="navfoot">
+      <div class="tabs__list-container themeseg" role="group" aria-label="Appearance"><div class="tabs__list" id="theme" data-orientation="horizontal">
+        <button class="tabs__tab" data-theme-set="light">Light</button><button class="tabs__tab" data-theme-set="dark">Dark</button><button class="tabs__tab" data-theme-set="auto">Auto</button>
+      </div></div>
+      <span class="sharetag">Prototype — confirm figures with a registered tax agent.</span>
+      <span class="chip chip--sm chip--default" id="store"><span class="dot"></span><span class="chip__label" id="storetxt">connecting…</span></span>
+    </div>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+
+var GST_FREE_NOTE = "no GST";
+
+var SECTIONS = [
+  {id:"summary", code:"",   name:"Overview",             kind:"derived", group:""},
+  {id:"tests",   code:"",   name:"Tax return",           kind:"derived", group:""},
+  {id:"bas",     code:"",   name:"BAS",                  kind:"derived", group:""},
+  {id:"i01",     code:"1",  name:"Salary & wages",       kind:"gen", group:"Income"},
+  {id:"i10",     code:"10", name:"Interest",             kind:"gen", group:"Income"},
+  {id:"i11",     code:"11", name:"Dividends",            kind:"gen", group:"Income"},
+  {id:"i12",     code:"12", name:"Employee share schemes", kind:"gen", group:"Income"},
+  {id:"i18",     code:"18", name:"Capital gains",        kind:"gen", group:"Income"},
+  {id:"i20",     code:"20", name:"Foreign income",       kind:"gen", group:"Income"},
+  {id:"i21",     code:"21", name:"Rent",                 kind:"gen", group:"Income"},
+  {id:"s05",     code:"15", name:"Business income & expenses", kind:"business", group:"Business"},
+  {id:"d01",     code:"D1", name:"Car expenses",         kind:"gen", group:"Deductions"},
+  {id:"d03",     code:"D3", name:"Clothing & laundry",   kind:"gen", group:"Deductions"},
+  {id:"s07",     code:"D4–10", name:"Work-related & other", kind:"deduction", group:"Deductions"},
+  {id:"s07a",    code:"",   name:"Working from home",    kind:"wfh",  parent:"s07", group:"Deductions"},
+  {id:"s07b",    code:"",   name:"Decline in value",     kind:"depr", parent:"s07", group:"Deductions"},
+  {id:"d07",     code:"D7–8", name:"Interest & dividend deductions", kind:"gen", group:"Deductions"},
+  {id:"d12",     code:"D12", name:"Personal super contributions", kind:"gen", group:"Deductions"},
+  {id:"d15",     code:"D15", name:"Other deductions",    kind:"gen", group:"Deductions"},
+  {id:"h01",     code:"",   name:"Private health insurance", kind:"gen", group:"Other"},
+  {id:"s08",     code:"",   name:"Notes for the agent",  kind:"note", group:"Other"},
+  {id:"hist",    code:"",   name:"Compare & find",       kind:"derived", group:"Tools"},
+  {id:"setup",   code:"",   name:"Setup",                kind:"derived", group:"Tools"},
+  {id:"rates",   code:"",   name:"Rates & thresholds",   kind:"derived", group:"Tools", hidden:true}
+];
+// ---------- which schedules apply this year ----------
+// prefs.applies["<fy>:<section>"] = true | false. Unset = not yet confirmed; suggested from rows and last year.
+function isDataSec(x){ return ["gen","business","deduction"].indexOf(x.kind)>-1; }
+function appliesKey(id){ return state.fy+":"+id; }
+function appliesRec(id){ var v=(state.prefs.applies||{})[appliesKey(id)]; return v===true||v===false ? v : null; }
+function hasRows(id, fy){ return state.rows.some(function(r){ return r.section===id && rowFY(r)===(fy||state.fy); }); }
+function suggestApplies(id){
+  if(hasRows(id)) return true;
+  var prev=(state.prefs.applies||{})[(state.fy-1)+":"+id];
+  if(prev===true || hasRows(id, state.fy-1)) return true;
+  if(prev===false) return false;
+  return null;   // no history either way
+}
+function applies(id){ var a=appliesRec(id); if(a!==null) return a; if(hasRows(id)) return true; var sg=suggestApplies(id); return sg!==false; }
+function setApplies(id, v){ state.prefs.applies=Object.assign({},state.prefs.applies||{}); state.prefs.applies[appliesKey(id)]=v; savePrefs(); }
+function unconfirmed(){ return SECTIONS.filter(function(x){ return isDataSec(x) && !x.parent && appliesRec(x.id)===null && !hasRows(x.id); }); }
+function confirmCard(){
+  if(people().every(function(o){ return returnLocked(o); })) return "";   // a lodged year isn't being set up any more
+  var u = unconfirmed(); if(!u.length) return "";
+  var yes = u.filter(function(x){return suggestApplies(x.id)===true;}).length, no = u.filter(function(x){return suggestApplies(x.id)===false;}).length;
+  return '<details class="card card--default" style="padding:14px 18px"'+(state.openConfirm?' open':'')+' data-confirm><summary style="list-style:none;cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+    +'<span style="font-size:15px;font-weight:600">'+plural(u.length,"schedule")+' not confirmed for '+fyLabel()+'</span>'
+    +'<span class="sharetag">'+(yes||no ? 'last year: '+yes+' applied, '+no+' didn\'t' : 'no history to suggest from')+'</span>'
+    +'<span class="spacer"></span><button class="button button--primary button--sm" data-applies="*" data-val="s">'+(yes||no?'Accept the suggestions':'Mark all as applying')+'</button>'
+    +'<span class="button button--tertiary button--sm">Review</span></summary>'
+    +'<p style="margin:10px 0;font-size:13px;color:var(--muted)">Nothing has been entered in these yet. "Not this year" moves a schedule out of the way; it can always be brought back.</p>'
+    +'<div class="table__scroll-container"><table class="table__content hh" style="min-width:0"><tbody class="table__body">'+u.map(function(x){
+      var sg = suggestApplies(x.id);
+      return '<tr class="table__row"><td class="table__cell">'+(x.code?'<span class="code" style="color:var(--muted);font-size:12px;margin-right:8px">'+esc(x.code)+'</span>':'')+esc(x.name)
+        +(sg===true?' <span class="chip chip--sm chip--accent">applied last year</span>':(sg===false?' <span class="chip chip--sm chip--default">not last year</span>':''))+'</td>'
+        +'<td class="table__cell r" style="white-space:nowrap"><button class="button button--tertiary button--sm" data-applies="'+x.id+'" data-val="1">Applies</button> <button class="button button--tertiary button--sm" data-applies="'+x.id+'" data-val="0">Not this year</button></td></tr>';
+    }).join("")+'</tbody></table></div>'
+    +'</details>';
+}
+function naBanner(sec){
+  var top = sec.parent ? secById(sec.parent) : sec;
+  if(!isDataSec(top)) return "";
+  if(!applies(top.id)) return '<div class="note"><strong>'+esc(top.name)+' is marked not applicable for '+fyLabel()+'.</strong> It stays out of the summary and the readiness list. <button class="button button--tertiary button--sm" data-applies="'+top.id+'" data-val="1">Applies after all</button></div>';
+  if(!hasRows(top.id)) return '<div class="nextline">Applies this year'+(appliesRec(top.id)===null?' (assumed)':'')+' · <button class="linkbtn" data-applies="'+top.id+'" data-val="0">Doesn\'t apply in '+fyLabel()+'</button></div>';
+  return "";
+}
+function secById(id){ return SECTIONS.filter(function(x){return x.id===id;})[0]; }
+
+var ATO_CATS = ["D5 Other work-related — tools & equipment","D5 Other work-related — phone & internet","D5 Other work-related — subscriptions","D5 Other work-related — union & professional fees","D4 Work-related self-education","D2 Work-related travel","D9 Gifts or donations","D10 Cost of managing tax affairs"];
+var LEGACY_CATS = {"D5 Tools & equipment":0,"D5 Phone & internet":1,"D5 Subscriptions":2,"D5 Professional memberships":3,"D4 Self-education":4,"D1 Work travel":5,"D9 Gifts & donations":6};
+function catLabel(c){ return LEGACY_CATS.hasOwnProperty(c) ? ATO_CATS[LEGACY_CATS[c]] : (c||""); }
+var OWNERS = ["Ee","Darrelle"];
+var DEPR_THRESHOLD = 300;
+
+var state = { rows:[], prefs:{wfhRate:0.70, basis:"cash"}, view:"summary", person:"Household", db:null, live:false, ui:null, err:"" };
+
+// ---------- helpers ----------
+function uid(){ return "r"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function money(n){
+  var v = Number(n)||0;
+  return (v<0?"-":"")+"$"+Math.abs(v).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtDate(s){
+  if(!s) return "";
+  var p=s.split("-"); if(p.length!==3) return s;
+  var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return Number(p[2])+" "+m[Number(p[1])-1]+" "+p[0];
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+function el(id){ return document.getElementById(id); }
+// ---------- financial years ----------
+// A row's year comes from its date. Nothing is archived or copied — every year stays in the same ledger.
+function fyOf(date){
+  if(!date) return currentFY();
+  var y = Number(date.slice(0,4)), m = Number(date.slice(5,7));
+  return m>=7 ? y+1 : y;
+}
+function currentFY(){ return fyOf(todayISO()); }
+function fyLabel(fy){ fy = fy||state.fy; return "FY "+(fy-1)+"–"+String(fy).slice(2); }
+function fyList(){
+  var lo = currentFY()-5;                       // records are kept for five years
+  state.rows.forEach(function(r){ if(r.date){ var f=fyOf(r.date); if(f<lo && f>2000) lo=f; } });
+  var out=[]; for(var f=currentFY(); f>=lo; f--) out.push(f);
+  return out;
+}
+function fysWithData(){
+  var seen={}; state.rows.forEach(function(r){ seen[rowFY(r)]=1; });
+  seen[currentFY()]=1;
+  return Object.keys(seen).map(Number).sort();
+}
+function buildQuarters(fy){
+  var a=fy-1, b=fy;
+  return [[a+"-07-01",a+"-09-30","Jul–Sep "+a,a+"-10-28"],
+          [a+"-10-01",a+"-12-31","Oct–Dec "+a,b+"-02-28"],
+          [b+"-01-01",b+"-03-31","Jan–Mar "+b,b+"-04-28"],
+          [b+"-04-01",b+"-06-30","Apr–Jun "+b,b+"-07-28"]];
+}
+function setFY(fy){ state.fy = fy; QUARTERS = buildQuarters(fy); }
+function asFY(fy, fn){ var prev=state.fy; setFY(fy); try{ return fn(); } finally{ setFY(prev); } }
+function isPastFY(){ return state.fy < currentFY(); }
+function defaultEntryDate(){ var t=todayISO(); return fyOf(t)===state.fy ? t : QUARTERS[3][1]; }
+// ---------- rates & thresholds ----------
+// v: value by income year (FY key = year ending 30 June).  ok: years confirmed on ato.gov.au on 23 Sep 2026.
+// Anything missing for the viewed year carries forward the latest value and is flagged on the Rates page.
+var CHECKED = "23 Sep 2026";
+var RATEBOOK = {
+  wfh:  {l:"Working from home — fixed rate per hour", fmt:"cents", v:{2021:.52,2022:.52,2023:.67,2024:.67,2025:.70,2026:.70}, ok:[2021,2022,2023,2024,2025,2026],
+         src:"https://www.ato.gov.au/individuals-and-families/income-deductions-offsets-and-records/deductions-you-can-claim/work-related-deductions/working-from-home-expenses/fixed-rate-method",
+         note:"Covers home and mobile phone, internet and data, electricity and gas, stationery and computer consumables. Actual hours must be recorded for the whole year."},
+  car:  {l:"Car expenses — cents per kilometre", fmt:"cents", v:{2023:.78,2024:.85,2025:.88,2026:.88}, ok:[2025,2026],
+         src:"https://www.ato.gov.au/forms-and-instructions/individual-tax-return-2026-instructions/deduction-questions-d1-d10-individual-tax-return-2026/d1-work-related-car-expenses-2026",
+         note:"Capped at 5,000 work kilometres per car per year."},
+  carCap:{l:"Car expenses — kilometre cap", fmt:"km", v:{2020:5000}, ok:["all"], src:"https://www.ato.gov.au/forms-and-instructions/individual-tax-return-2026-instructions/deduction-questions-d1-d10-individual-tax-return-2026/d1-work-related-car-expenses-2026"},
+  imm300:{l:"Immediate deduction — employee (non-business) assets", fmt:"money", v:{2020:300}, ok:["all"],
+         src:"https://www.ato.gov.au/individuals-and-families/income-deductions-offsets-and-records/deductions-you-can-claim/work-related-deductions/tools-computers-and-items-you-use-for-work/depreciating-assets-you-use-for-work/assets-costing-300-dollars-or-less",
+         note:"Tested on your share of the cost for jointly owned assets; sets and identical items bought in the same year are added together. Does not apply to business assets."},
+  iawo: {l:"Instant asset write-off — small business, per asset", fmt:"money", v:{2025:20000,2026:20000,2027:20000}, ok:[2027],
+         src:"https://www.ato.gov.au/businesses-and-organisations/small-business-newsroom/20000-instant-asset-writeoff-iawo-here-to-stay",
+         note:"Assets costing less than this (GST-exclusive if registered) are written off in full. Permanent from 1 July 2026 for aggregated turnover under $10 million."},
+  taxInv:{l:"Tax invoice needed to claim a GST credit — above", fmt:"money", v:{2020:82.5}, ok:["all"], src:"https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/claiming-gst-credits/when-you-can-claim-a-gst-credit"},
+  gstReg:{l:"GST registration threshold (current or projected GST turnover)", fmt:"money", v:{2020:75000}, ok:["all"], src:"https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/registering-for-gst",
+         note:"Current GST turnover = this month plus the previous 11, excluding GST."},
+  mls:  {l:"Medicare levy surcharge — family base threshold", fmt:"money", v:{2025:194000,2026:202000,2027:210000}, ok:[2026,2027],
+         src:"https://www.ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy-surcharge/medicare-levy-surcharge-income-thresholds-and-rates",
+         note:"Plus $1,500 for each MLS dependent child after the first."},
+  mlsSingle:{l:"Medicare levy surcharge — single base threshold", fmt:"money", v:{2025:97000,2026:101000,2027:105000}, ok:[2026,2027], src:"https://www.ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy-surcharge/medicare-levy-surcharge-income-thresholds-and-rates"},
+  ccCap:{l:"Concessional super contributions cap", fmt:"money", v:{2024:27500,2025:30000,2026:30000,2027:32500}, ok:[2024,2025,2026,2027],
+         src:"https://www.ato.gov.au/tax-rates-and-codes/key-superannuation-rates-and-thresholds/contributions-caps",
+         note:"Employer super (including salary sacrifice) plus personal contributions you claim a deduction for. Unused cap from the previous five years can be carried forward if your total super balance was under $500,000 on 30 June last year."},
+  pu:   {l:"Penalty unit", fmt:"money", v:{2024:313,2025:330,2026:330,2027:364}, ok:[2026,2027],
+         src:"https://www.ato.gov.au/individuals-and-families/paying-the-ato/interest-and-penalties/penalties/penalty-units",
+         note:"$330 applied from 7 Nov 2024 to 30 Jun 2026; $364 from 1 Jul 2026. Failure to lodge: one unit per 28 days late, up to five for individuals and small businesses."}
+};
+var FIXED_FACTS = [
+  ["Quarterly BAS due dates","28 Oct, 28 Feb, 28 Apr, 28 Jul. Lodging online or through an agent can add two weeks, except for Q2. A due date on a weekend or public holiday moves to the next business day.","https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/business-activity-statements-bas/due-dates-for-lodging-and-paying-your-bas"],
+  ["Tax return — lodging yourself","31 October after the year ends. A registered tax agent's lodgment program usually gives longer.","https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/reports-and-returns/due-dates-for-lodging-and-paying/due-dates-by-month/october"],
+  ["GST credits on a cash basis","Claimed in the period the purchase is paid; GST on sales is reported when payment is received.","https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/claiming-gst-credits/when-you-can-claim-a-gst-credit"],
+  ["Personal services income — deductions","If the PSI rules apply, a sole trader can't deduct home rent, mortgage interest, rates or land tax, or payments and super to associates for non-principal work. Home running costs, insurance, advertising, depreciation and your own super stay deductible.","https://www.ato.gov.au/businesses-and-organisations/income-deductions-and-concessions/personal-services-income/what-to-do-when-the-psi-rules-apply/claiming-deductions-when-receiving-psi"]
+];
+function rateYear(key, fy){
+  var v = RATEBOOK[key].v; fy = fy||state.fy;
+  if(v[fy]!=null) return {val:v[fy], year:fy, carried:false};
+  var ys = Object.keys(v).map(Number).sort(function(a,b){return a-b;}), best=null;
+  ys.forEach(function(y){ if(y<=fy) best=y; }); if(best==null) best=ys[0];
+  return {val:v[best], year:best, carried:true};
+}
+function rate(key, fy){ return rateYear(key, fy).val; }
+function rateStatus(key, fy){
+  fy=fy||state.fy; var R=RATEBOOK[key], ry=rateYear(key,fy);
+  if(R.ok.indexOf("all")>-1) return "ok";
+  if(ry.carried) return "carried";
+  return R.ok.indexOf(fy)>-1 ? "ok" : "memory";
+}
+var WFH_RATES = RATEBOOK.wfh.v;
+function wfhRate(){
+  var saved = state.prefs.wfhRates && state.prefs.wfhRates[state.fy];
+  if(saved!=null) return Number(saved)||0;
+  if(state.fy===2027 && state.prefs.wfhRate!=null) return Number(state.prefs.wfhRate)||0;
+  return rate("wfh");
+}
+
+function allRowsIn(sec){ return state.rows.filter(function(r){return r.section===sec;}); }
+// The income year a row belongs to. Business income on a receipts basis counts when it is received;
+// unpaid income stays in its invoice year (shown, but not counted) until it is paid.
+function incomeBasisOf(o){ return (state.prefs.incomeBy||{})[o] || "receipts"; }
+function rowFY(r){
+  if(r.section==="s05" && r.direction==="income" && incomeBasisOf(ownerOf(r))==="receipts" && r.paid) return fyOf(r.paid);
+  return fyOf(r.date);
+}
+function notYetDerived(r){ return r.section==="s05" && r.direction==="income" && incomeBasisOf(ownerOf(r))==="receipts" && r.paid===""; }
+function rowsIn(sec){ return state.rows.filter(function(r){return r.section===sec && rowFY(r)===state.fy;})
+  .sort(function(a,b){ return (b.date||"").localeCompare(a.date||""); }); }
+
+// quarter containing today, bounded to the FY
+var QUARTERS = [];
+function todayISO(){ var d=new Date(); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
+function currentQuarter(){
+  var qs=QUARTERS;
+  var t=todayISO();
+  for(var i=0;i<qs.length;i++){ if(t>=qs[i][0]&&t<=qs[i][1]) return qs[i]; }
+  return null;   // today is outside the year being viewed
+}
+function daysUntil(d){
+  return Math.ceil((new Date(d+"T00:00:00") - new Date())/86400000);
+}
+
+// ---------- people ----------
+// Every row belongs to one taxpayer, or is "Shared" with a split (share = first owner's %).
+// A shared row is entered once; each person's figures are derived from their share.
+var HOUSEHOLD = "Household", SHARED = "Shared";
+var ASSET_CAT = "Depreciating asset — instant asset write-off";
+var PSI_DENIED = ["Home occupancy — rent, mortgage interest, rates, land tax","Payments to associates — non-principal work"];
+var BIZ_CATS = ["All other expenses","Cost of sales","Contractors & subcontractors","Superannuation","Motor vehicle","Repairs & maintenance","Rent — business premises",ASSET_CAT,"Depreciation","Interest","Advertising","Insurance","Travel"].concat(PSI_DENIED);
+// PSI status per ABN holder per year: "" not assessed | "notpsi" not PSI | "psb" PSI but a personal services business | "applies" PSI rules apply
+function gstRegistered(o){ var v=(state.prefs.gstReg||{})[o]; return v!==false; }
+function psiKey(o){ return state.fy+":"+o; }
+function psiOf(o){ return (state.prefs.psi||{})[psiKey(o)] || ""; }
+function assetCost(r){ return (Number(r.amount)||0)-(r.noGst||!gstRegistered(ownerOf(r))?0:(Number(r.gst)||0)); }
+var BO = null; // the ABN holder the BAS functions are currently looking at
+function people(){ return state.person===HOUSEHOLD ? OWNERS.slice() : [state.person]; }
+function ownerOf(r){ return r.owner || OWNERS[0]; }
+function shareOf(r,o){
+  if(ownerOf(r)===SHARED){
+    var pc = r.share==null ? 50 : Number(r.share); if(isNaN(pc)) pc=50;
+    pc = Math.max(0, Math.min(100, pc));
+    return (o===OWNERS[0] ? pc : 100-pc)/100;
+  }
+  return ownerOf(r)===o ? 1 : 0;
+}
+function mine(r){ return people().some(function(o){ return shareOf(r,o)>0; }); }
+function basOwner(){ return BO || (state.person===HOUSEHOLD ? OWNERS[0] : state.person); }
+function withOwner(o, fn){ var prev=BO; BO=o; try{ return fn(); } finally{ BO=prev; } }
+function abnHolders(){
+  if(!applies("s05")) return [];
+  var seen={}; rowsIn("s05").forEach(function(r){ seen[ownerOf(r)]=1; });
+  return people().filter(function(o){ return seen[o]; });
+}
+function basHolders(){ return abnHolders().filter(gstRegistered); }
+
+// ---------- financial logic ----------
+// one entry per (row, taxpayer) — the $300 test is applied to each person's share of the cost
+var PHONE_CAT = "D5 Other work-related — phone & internet";
+function wfhHoursBy(){ var by={}; OWNERS.forEach(function(o){by[o]=0;}); if(applies("s07")) rowsIn("s07a").forEach(function(r){ by[ownerOf(r)]=(by[ownerOf(r)]||0)+(Number(r.hours)||0); }); return by; }
+function isFixedRateCovered(r){ var c = catLabel(r.cat); return c===PHONE_CAT; }
+function deductionEntries(){
+  var out=[]; if(!applies("s07")) return out;
+  var hrs = wfhHoursBy();
+  rowsIn("s07").forEach(function(r){
+    people().forEach(function(o){
+      var sh = shareOf(r,o); if(sh<=0) return;
+      var portion = (Number(r.amount)||0)*sh;
+      out.push({r:r, o:o, share:sh, portion:portion, gst:(r.noGst?0:(Number(r.gst)||0))*sh, depr:portion>DEPR_THRESHOLD,
+                overlap: isFixedRateCovered(r) && hrs[o]>0});
+    });
+  });
+  return out;
+}
+function deductionTotals(){
+  var out = {outright:{}, deprBy:{}, depr:[], entries:[], overlap:[], overlapBy:{}, total:0, deprTotal:0, missing:0};
+  OWNERS.forEach(function(o){ out.overlapBy[o]=0; });
+  OWNERS.forEach(function(o){ out.outright[o]=0; out.deprBy[o]=0; });
+  var seenMissing={};
+  deductionEntries().forEach(function(e){
+    if(e.depr){ out.depr.push(e); out.deprBy[e.o]+=e.portion; out.deprTotal+=e.portion; return; }
+    out.entries.push(e);
+    if(e.overlap){ out.overlap.push(e); out.overlapBy[e.o] += e.portion; return; }   // already inside the fixed rate — not claimed twice
+    out.outright[e.o] += e.portion; out.total += e.portion;
+    if(!e.r.doc && !seenMissing[e.r.id]){ seenMissing[e.r.id]=1; out.missing++; }
+  });
+  return out;
+}
+// Hours are logged once, tagged employment (a D5 deduction) or business (an ABN expense).
+// claim / hours / by = employment only, since that is what the Deductions schedule claims.
+function wfhUse(r){ return r.use==="business" ? "business" : "work"; }
+function wfhTotals(){
+  var rs = applies("s07") ? rowsIn("s07a").filter(mine) : [], by={}, byBiz={}, hours=0, bizHours=0;
+  OWNERS.forEach(function(o){ by[o]=0; byBiz[o]=0; });
+  rs.forEach(function(r){
+    var h = Number(r.hours)||0;
+    if(wfhUse(r)==="business"){ byBiz[ownerOf(r)] += h; bizHours += h; }
+    else { by[ownerOf(r)] += h; hours += h; }
+  });
+  var rate = wfhRate();
+  return {hours:hours, by:by, rate:rate, claim:hours*rate, bizHours:bizHours, byBiz:byBiz, bizClaim:bizHours*rate, rows:rs};
+}
+function businessTotals(owners){
+  owners = owners || people();
+  var rs = rowsIn("s05").filter(function(r){ return owners.indexOf(ownerOf(r))>-1; });
+  var t = {sales:0, gstOnSales:0, gstOnPurchases:0, expenses:0, rows:rs, pool:[], poolTotal:0, psiDenied:[], psiDeniedTotal:0, homeOffice:0, homeHours:0};
+  if(applies("s07")) rowsIn("s07a").forEach(function(r){
+    if(wfhUse(r)!=="business" || owners.indexOf(ownerOf(r))<0) return;
+    var h = Number(r.hours)||0; t.homeHours += h; t.homeOffice += h*wfhRate();
+  });
+  t.expenses += t.homeOffice;    // fixed rate running costs — no GST credit; still deductible under the PSI rules
+  rs.forEach(function(r){
+    var amt = Number(r.amount)||0;
+    var gst = r.noGst ? 0 : (Number(r.gst)||0);
+    if(r.direction==="income"){
+      if(notYetDerived(r)){ t.unpaidIncome = (t.unpaidIncome||0) + amt - gst; return; }
+      t.sales += amt - gst;                 // income tax figures exclude GST; the BAS picks the GST up
+      t.gstOnSales += gst;
+    }else{
+      var pc = r.apportion==null ? 100 : Number(r.apportion);
+      if(isNaN(pc)) pc = 100;
+      var reg = gstRegistered(ownerOf(r));
+      var exp = (reg ? amt - gst : amt) * (pc/100);          // not registered: no GST credit, so GST is part of the cost
+      if(reg) t.gstOnPurchases += gst * (pc/100);   // GST credits are claimed on the BAS regardless of income tax treatment
+      if(r.bcat===ASSET_CAT && assetCost(r) >= rate("iawo")){ t.pool.push(r); t.poolTotal += exp; return; }
+      if(PSI_DENIED.indexOf(r.bcat)>-1 && psiOf(ownerOf(r))==="applies"){ t.psiDenied.push(r); t.psiDeniedTotal += exp; return; }
+      t.expenses += exp;
+    }
+  });
+  return t;
+}
+// BAS is per ABN, never per household — always computed for one holder
+function quarterBAS(q, o){
+  q = q || currentQuarter() || QUARTERS[3]; o = o || basOwner();
+  var t = {q:q, sales:0, gstOnSales:0, gstOnPurchases:0, count:0, unsubstantiated:0};
+  if(!gstRegistered(o)){ t.net = 0; return t; }
+  allRowsIn("s05").forEach(function(r){
+    if(ownerOf(r)!==o) return;
+    var bd = basDate(r);
+    if(!bd || bd < q[0] || bd > q[1]) return;
+    t.count++;
+    var amt = Number(r.amount)||0;
+    var gst = r.noGst ? 0 : (Number(r.gst)||0);
+    if(r.direction==="income"){ t.sales += amt; t.gstOnSales += gst; }
+    else {
+      var pc = r.apportion==null ? 100 : Number(r.apportion);
+      if(isNaN(pc)) pc=100;
+      t.gstOnPurchases += gst*(pc/100);
+      if(amt > 82.50 && !r.doc && gst>0) t.unsubstantiated += gst*(pc/100);
+    }
+  });
+  t.net = t.gstOnSales - t.gstOnPurchases;
+  return t;
+}
+function rollingTurnover(o){
+  o = o || basOwner();
+  var cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear()-1);
+  var c = cutoff.toISOString().slice(0,10), sum=0;
+  allRowsIn("s05").forEach(function(r){
+    if(ownerOf(r)===o && r.direction==="income" && r.date >= c) sum += (Number(r.amount)||0) - (r.noGst?0:(Number(r.gst)||0));   // GST turnover excludes GST
+  });
+  return sum;
+}
+function sectionTotal(secId){
+  if(secId==="s07"){ var d=deductionTotals(); return d.total + wfhTotals().claim; }
+  if(secId==="s07a"){ var w=wfhTotals(); return w.claim + w.bizClaim; }   // everything on that page; the D5 part rolls into Deductions
+  if(secId==="s07b") return deductionTotals().deprTotal;
+  if(secId==="s05"){ var b=businessTotals(); return b.sales - b.expenses; }
+  if(GEN[secId]) return rowsIn(secId).length ? genMain(secId) : null;
+  return null;
+}
+
+// ---------- persistence ----------
+function persist(row){
+  if(!state.db){ render(); return; }
+  state.db.doc("rows/"+row.id).set(row).catch(function(){});
+}
+function remove(id){
+  var rr = state.rows.filter(function(r){return r.id===id;})[0];
+  if(rr && rowLocked(rr)) return;
+  if(state.editing===id) state.editing = null;
+  state.rows = state.rows.filter(function(r){return r.id!==id;});
+  if(state.db) state.db.doc("rows/"+id).delete().catch(function(){});
+  render();
+}
+function savePrefs(){
+  if(state.db) state.db.doc("settings/prefs").set(state.prefs).catch(function(){});
+}
+function addRow(row){
+  row.id = uid();
+  state.rows.push(row);
+  persist(row);
+  render();
+}
+
+// ---------- entry forms ----------
+function entryHTML(sec){
+  if(sec.kind==="gen") return genEntryHTML(sec);
+  var today = defaultEntryDate();
+  if(sec.kind==="deduction"){
+    return '<div class="entry"><div class="row">'
+      +fld("Date",'<input type="date" class="input input--secondary w-date" id="e-date" value="'+today+'">')
+      +fld("Supplier",'<input class="input input--secondary w-txt" id="e-party" placeholder="Officeworks">')
+      +fld("Description",'<input class="input input--secondary w-desc" id="e-desc" placeholder="Monitor">')
+      +fld("Amount",'<input class="input input--secondary w-amt num" id="e-amount" inputmode="decimal" placeholder="0.00">')
+      +fld("GST",'<input class="input input--secondary w-gst num" id="e-gst" inputmode="decimal" placeholder="0.00">')
+      +fld("Return label",'<select class="input input--secondary w-sel" id="e-cat">'+ATO_CATS.map(function(c){return '<option>'+esc(c)+'</option>';}).join("")+'</select>')
+      +ownerSelect(true)
+      +fld("&nbsp;",'<label class="pill" style="cursor:pointer"><input type="checkbox" id="e-doc" style="min-width:auto"> receipt</label>')
+      +'<button class="button button--primary" id="e-save">Add row</button>'
+      +'</div><div class="note" id="e-wfhx" hidden style="margin:10px 0 0"><strong>Covered by the working from home fixed rate.</strong> This person has WFH hours logged this year, so phone and internet can\'t be claimed separately — the row will be recorded but left out of the total.</div><div class="hint" id="e-mem" hidden style="color:var(--accent)"></div><div class="hint"><kbd class="kbd">Enter</kbd> saves and starts the next row · '
+      +'GST is read from the invoice, never inferred — leave it blank where none was charged. '
+      +'Anything over '+money(DEPR_THRESHOLD)+' moves to Decline in value automatically.</div></div>';
+  }
+  if(sec.kind==="business"){
+    return '<div class="entry"><div class="row">'
+      +fld("Invoice date",'<input type="date" class="input input--secondary w-date" id="e-date" value="'+today+'">')
+      +fld("Date paid <span class=\"sharetag\">blank = unpaid</span>",'<input type="date" class="input input--secondary w-date" id="e-paid" value="'+today+'">')
+      +ownerSelect(false).replace("Taxpayer","ABN holder")
+      +fld("Direction",'<select class="input input--secondary input input--secondary" id="e-dir"><option value="income">Income</option><option value="expense">Expense</option></select>')
+      +fld("Party",'<input class="input input--secondary w-txt" id="e-party" placeholder="Client A">')
+      +fld("Description",'<input class="input input--secondary w-desc" id="e-desc" placeholder="Design retainer">')
+      +fld("Amount inc GST",'<input class="input input--secondary w-amt num" id="e-amount" inputmode="decimal" placeholder="0.00">')
+      +fld("GST",'<input class="input input--secondary w-gst num" id="e-gst" inputmode="decimal" placeholder="0.00">')
+      +fld("Business use %",'<input class="input input--secondary w-pc num" id="e-pc" inputmode="numeric" value="100">')
+      +fld("Expense category",'<select class="input input--secondary input input--secondary" id="e-bcat" class="w-sel" style="width:200px">'+BIZ_CATS.map(function(c){return '<option>'+esc(c)+'</option>';}).join("")+'</select>')
+      +fld("&nbsp;",'<label class="pill" style="cursor:pointer"><input type="checkbox" id="e-doc" style="min-width:auto"> tax invoice</label>')
+      +'<button class="button button--primary" id="e-save">Add row</button>'
+      +'</div><div class="note" id="e-err" hidden style="margin:10px 0 0"></div><div class="hint">'
+      +'<button class="button button--tertiary button--sm" id="e-div11">÷11 into GST</button> '
+      +'— a deliberate action, because plenty of supplies carry no GST at all. Amount, GST, business use % and evidence can be edited directly in the table. '
+      +'Expenses over $82.50 need a tax invoice to claim the credit.</div></div>';
+  }
+  if(sec.kind==="wfh"){
+    return '<div class="entry"><div class="row">'
+      +fld("Week beginning",'<input type="date" class="input input--secondary w-date" id="e-date" value="'+today+'">')
+      +ownerSelect(false)
+      +fld("For",'<select class="input input--secondary" id="e-use"><option value="work">Employment — D5 deduction</option><option value="business"'+(state.lastUse==="business"?' selected':'')+'>Business — ABN expense</option></select>')
+      +fld("Hours",'<input class="input input--secondary w-hrs num" id="e-hours" inputmode="decimal" placeholder="0">')
+      +'<button class="button button--primary" id="e-save">Add row</button>'
+      +'</div><div class="hint">'+money(wfhRate())+' an hour for '+fyLabel()+'. <button class="linkbtn" data-go="setup">Change in Setup</button></div></div>';
+  }
+  if(sec.kind==="note"){
+    return '<div class="entry"><div class="row">'
+      +fld("Date",'<input type="date" class="input input--secondary w-date" id="e-date" value="'+today+'">')
+      +fld("Note",'<input class="input input--secondary w-desc" style="width:380px" id="e-desc" placeholder="Anything the agent should know">')
+      +'<button class="button button--primary" id="e-save">Add note</button>'
+      +'</div></div>';
+  }
+  return "";
+}
+function ownerSelect(allowShared){
+  var opts = OWNERS.slice(); if(allowShared) opts.push(SHARED);
+  var sel = state.person===HOUSEHOLD ? (state.lastOwner||OWNERS[0]) : state.person;
+  if(opts.indexOf(sel)<0) sel = OWNERS[0];
+  return fld("Taxpayer",'<select class="input input--secondary input input--secondary" id="e-owner">'+opts.map(function(o){return '<option'+(o===sel?' selected':'')+'>'+esc(o)+'</option>';}).join("")+'</select>')
+    +(allowShared ? '<div class="f" id="e-share-f" hidden><label>'+esc(OWNERS[0])+'\'s share %</label><input class="input input--secondary w-pc num" id="e-share" inputmode="numeric" value="50"></div>' : '');
+}
+function fld(label,input){ return '<div class="f"><label>'+label+'</label>'+input+'</div>'; }
+
+function formErr(msg){
+  var box = el("e-err");
+  if(!box){ box = document.createElement("div"); box.id="e-err"; box.className="note"; box.style.margin="10px 0 0"; var en=document.querySelector(".entry"); if(en) en.appendChild(box); }
+  box.hidden = false; box.innerHTML = msg;
+}
+function setVal(id, v){ var e=el(id); if(!e) return; if(e.type==="checkbox") e.checked=!!v; else e.value = v==null?"":v; e.dispatchEvent(new Event("change",{bubbles:true})); }
+function setSelText(id, text){ var e=el(id); if(!e) return; for(var i=0;i<e.options.length;i++){ if(e.options[i].text===text||e.options[i].value===text){ e.selectedIndex=i; break; } } e.dispatchEvent(new Event("change",{bubbles:true})); }
+function prefill(sec, r){
+  setVal("e-date", r.date); setSelText("e-owner", r.owner||OWNERS[0]); if(r.share!=null) setVal("e-share", r.share); setVal("e-doc", r.doc);
+  if(sec.kind==="deduction"){ setVal("e-party",r.party); setVal("e-desc",r.desc); setVal("e-amount",r.amount); setVal("e-gst", r.noGst?"":r.gst); setSelText("e-cat", catLabel(r.cat)); }
+  else if(sec.kind==="business"){
+    setVal("e-dir",r.direction); setVal("e-party",r.party); setVal("e-desc",r.desc); setVal("e-amount",r.amount); setVal("e-gst", r.noGst?"":r.gst);
+    setVal("e-pc", r.apportion==null?100:r.apportion); if(r.bcat) setSelText("e-bcat", r.bcat);
+    var ep=el("e-paid"); if(ep){ ep.value = r.paid===undefined ? (r.date||"") : r.paid; ep.dataset.touched="1"; }
+  }
+  else if(sec.kind==="wfh"){ setVal("e-use", wfhUse(r)); setVal("e-hours", r.hours); }
+  else if(sec.kind==="note"){ setVal("e-desc", r.desc); }
+  else if(sec.kind==="gen"){ GEN[sec.id].fields.forEach(function(f){ if(f.t==="sel") setSelText("g-"+f.k, r[f.k]); else setVal("g-"+f.k, r[f.k]); }); }
+}
+function wireEntry(sec){
+  var save = el("e-save"); if(!save) return;
+  var editing = state.editing && rowById(state.editing);
+  if(editing && editing.section!==sec.id) editing = null;
+  function val(id){ var e=el(id); return e?e.value:""; }
+  function chk(id){ var e=el(id); return e?e.checked:false; }
+
+  function doSave(){
+    var r = {section:sec.id, date:val("e-date")};
+    if(sec.kind==="deduction"){
+      if(!val("e-party")||!val("e-amount")) return;
+      r.party=val("e-party"); r.desc=val("e-desc");
+      r.amount=parseFloat(val("e-amount"))||0;
+      r.gst=parseFloat(val("e-gst"))||0; r.noGst=!val("e-gst");
+      r.cat=val("e-cat"); r.owner=val("e-owner"); r.doc=chk("e-doc");
+      if(r.owner===SHARED){ r.share=parseFloat(val("e-share")); if(isNaN(r.share)) r.share=50; r.share=Math.max(0,Math.min(100,r.share)); }
+    } else if(sec.kind==="business"){
+      if(!val("e-party")||!val("e-amount")) return;
+      r.owner = val("e-owner") || OWNERS[0];
+      r.paid = val("e-paid") || "";
+      var L = lockOfDate(basDate(r), r.owner);
+      if(L){
+        var er = el("e-err");
+        if(er){ er.hidden=false; er.innerHTML='<strong>'+esc(r.owner)+'\'s '+fyLabel(L.fy)+' Q'+(L.i+1)+' '+esc(L.q[2])+' is lodged and locked.</strong> This row would land in it and change figures already lodged with the ATO. Reopen the quarter on the BAS page first.'; }
+        return;
+      }
+      r.direction=val("e-dir"); r.party=val("e-party"); r.desc=val("e-desc");
+      r.amount=parseFloat(val("e-amount"))||0;
+      r.gst=parseFloat(val("e-gst"))||0; r.noGst=!val("e-gst");
+      r.apportion=parseFloat(val("e-pc")); if(isNaN(r.apportion)) r.apportion=100;
+      r.bcat = r.direction==="expense" ? val("e-bcat") : "";
+      r.doc=chk("e-doc");
+    } else if(sec.kind==="wfh"){
+      if(!val("e-hours")) return;
+      r.owner=val("e-owner"); r.hours=parseFloat(val("e-hours"))||0;
+      r.use = val("e-use")==="business" ? "business" : "work"; state.lastUse = r.use;
+      var rt=parseFloat(val("e-rate")); if(!isNaN(rt)&&rt!==wfhRate()){ state.prefs.wfhRates=Object.assign({},state.prefs.wfhRates||{}); state.prefs.wfhRates[state.fy]=rt; savePrefs(); }
+    } else if(sec.kind==="note"){
+      if(!val("e-desc")) return;
+      r.desc=val("e-desc");
+    } else if(sec.kind==="gen"){
+      if(!genCollect(sec, r, val, chk)) return;
+    }
+    var Y = yearLockOf(r);
+    if(Y){ formErr('<strong>'+esc(Y.o)+'\'s '+fyLabel(Y.fy)+' return is lodged and locked.</strong> This row would change it. Reopen the return from the Summary first — changes after lodgment need an amendment.'); return; }
+    if(editing){
+      r.id = editing.id;
+      state.rows = state.rows.map(function(x){ return x.id===r.id ? r : x; });
+      state.editing = null;
+      if(rowFY(r)!==state.fy){ setFY(rowFY(r)); state.flash = "Saved — this row now belongs to "+fyLabel()+", so you're viewing that year."; }
+      else state.flash = "Saved changes to "+(r.party||r.desc||"the row")+".";
+      persist(r); render(); return;
+    }
+    var keepDate = r.date;
+    if(r.owner) state.lastOwner = r.owner;
+    if(r.date && rowFY(r)!==state.fy){ setFY(rowFY(r)); state.flash = (rowFY(r)!==fyOf(r.date) ? "Income counts when it is received, so this row belongs to " : "That date falls in ")+fyLabel()+", so you're now viewing that year."; }
+    addRow(r);
+    // restore focus into the first text field for rapid repeat entry
+    var focusId = sec.kind==="wfh" ? "e-hours" : (sec.kind==="note" ? "e-desc" : (sec.kind==="gen" ? "g-party" : "e-party"));
+    var d=el("e-date"); if(d) d.value=keepDate;
+    var dp=el("e-paid"); if(dp && sec.kind==="business") dp.value=keepDate;
+    var f=el(focusId); if(f) f.focus();
+  }
+  save.addEventListener("click", doSave);
+  if(editing){
+    var en = save.closest(".entry"); if(en) en.classList.add("editing");
+    save.textContent = "Save changes";
+    var cancel = document.createElement("button"); cancel.className="button button--secondary"; cancel.textContent="Cancel"; cancel.setAttribute("data-cancel-edit","1");
+    save.parentNode.insertBefore(cancel, save.nextSibling);
+    var head = document.createElement("div"); head.className="edithead";
+    head.innerHTML = '<strong>Editing '+esc(editing.party||editing.desc||"row")+'</strong> · '+fmtDate(editing.date)+(ownerOf(editing)===SHARED?' · shared '+(editing.share==null?50:editing.share)+'/'+(100-(editing.share==null?50:editing.share)):'')+' — change anything, including the split, then save.';
+    en.insertBefore(head, en.firstChild);
+    prefill(sec, editing);
+    setTimeout(function(){ if(en.scrollIntoView) en.scrollIntoView({block:"center"}); var f=en.querySelector("input:not([type=date]):not([type=checkbox])"); if(f) f.focus(); }, 0);
+  }
+
+  var ow = el("e-owner"), sf = el("e-share-f");
+  if(ow && sf){ var syncShare=function(){ sf.hidden = ow.value!==SHARED; }; ow.addEventListener("change", syncShare); syncShare(); }
+
+  var ed = el("e-date"), epd = el("e-paid");
+  if(ed && epd){   // paid date follows the invoice date until it is changed by hand
+    epd.addEventListener("input", function(){ epd.dataset.touched = "1"; });
+    ed.addEventListener("input", function(){ if(!epd.dataset.touched) epd.value = ed.value; });
+    ed.addEventListener("change", function(){ if(!epd.dataset.touched) epd.value = ed.value; });
+  }
+  var cs0 = el("e-cat"), ow0 = el("e-owner"), wx = el("e-wfhx");
+  if(sec.kind==="deduction" && cs0 && wx){
+    var chkOverlap = function(){
+      var hrs = wfhHoursBy(), who = ow0 ? ow0.value : OWNERS[0];
+      var hit = cs0.options[cs0.selectedIndex].text===PHONE_CAT && (who===SHARED ? OWNERS.some(function(o){return hrs[o]>0;}) : hrs[who]>0);
+      wx.hidden = !hit;
+    };
+    cs0.addEventListener("change", chkOverlap); if(ow0) ow0.addEventListener("change", chkOverlap); chkOverlap();
+  }
+  var pf = el("e-party"), cs = el("e-cat"), mem = el("e-mem");
+  if(sec.kind==="deduction" && pf && cs && mem){
+    pf.addEventListener("change", function(){
+      var m = supplierMemory(pf.value);
+      if(!m){ mem.hidden=true; return; }
+      var idx = LEGACY_CATS.hasOwnProperty(m.cat) ? LEGACY_CATS[m.cat] : ATO_CATS.indexOf(m.cat);
+      if(idx>-1) cs.selectedIndex = idx;
+      mem.hidden=false;
+      mem.innerHTML = 'Recorded '+m.n+' time'+(m.n>1?'s':'')+' before, '+(m.labels>1?'most often as ':'as ')+'<strong>'+esc(catLabel(m.cat))+'</strong> — last in '+fyLabel(fyOf(m.last.date))+'. Label pre-selected; change it if this one is different.';
+    });
+  }
+
+  var d11 = el("e-div11");
+  if(d11) d11.addEventListener("click", function(){
+    var a=parseFloat(val("e-amount")); if(isNaN(a)) return;
+    el("e-gst").value = (a/11).toFixed(2);
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.entry input:not([type="checkbox"]):not([type="date"])'), function(e){
+    if(e.id==="e-rate") return;
+    e.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); doSave(); } });
+  });
+  [].forEach(function(id){
+    var e=el(id); if(!e) return;
+    e.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); doSave(); } });
+  });
+}
+
+// ---------- section renderers ----------
+function strip(cards){
+  return '<div class="grid">'+cards.map(function(c){
+    return '<div class="stat"><div class="k">'+esc(c.k)+'</div><div class="v num">'+esc(c.v)+'</div><div class="n">'+esc(c.n||"")+'</div></div>';
+  }).join("")+'</div>';
+}
+function plural(n,w){ return n+" "+w+(n===1?"":"s"); }
+function isAbnHolder(o){ return applies("s05") && allRowsIn("s05").some(function(r){ return ownerOf(r)===o; }); }
+function whoCell(e){
+  return esc(e.o)+(e.share<1 ? '<br><span class="sharetag">'+Math.round(e.share*100)+'% of '+money(e.r.amount)+'</span>' : '');
+}
+function renderDeductions(){
+  var t = deductionTotals(), es = t.entries;
+  var body = es.length ? es.map(function(e){
+    var r = e.r;
+    return '<tr class="table__row">'
+      +'<td class="table__cell num">'+fmtDate(r.date)+'</td>'
+      +'<td class="table__cell"><strong>'+esc(r.party)+'</strong>'+(r.desc?'<br><span style="color:var(--muted);font-size:12px">'+esc(r.desc)+'</span>':'')+'</td>'
+      +'<td class="table__cell r num">'+(e.overlap?'<s style="color:var(--muted)">'+money(e.portion)+'</s>':money(e.portion))+'</td>'
+      +'<td class="table__cell r num">'+(r.noGst?'<span class="chip chip--sm chip--default">'+GST_FREE_NOTE+'</span>':money(e.gst))+'</td>'
+      +'<td class="table__cell"><span class="chip chip--sm chip--default">'+esc(catLabel(r.cat))+'</span>'+(e.overlap?'<br><span class="chip chip--sm chip--warning" style="margin-top:4px">in the WFH fixed rate — not claimed</span>':'')+'</td>' 
+      +'<td class="table__cell">'+whoCell(e)+'</td>'
+      +'<td class="table__cell r">'+(r.doc?'<span class="chip chip--sm chip--accent">receipt</span>':'<span class="chip chip--sm chip--warning">none</span>')+'</td>'
+      +'<td class="table__cell r">'+rowActions(r)+'</td>'
+      +'</tr>';
+  }).join("") : '<tr class="table__row"><td class="table__cell" colspan="8"><div class="empty">Nothing here yet. Add the first row below.</div></td></tr>';
+
+  var ppl = people();
+  var foot = (ppl.length>1 ? ppl.map(function(o){
+    return '<tr class="table__row"><td class="table__cell" colspan="2">Subtotal — '+esc(o)+'</td><td class="table__cell r num">'+money(t.outright[o])+'</td><td class="table__cell" colspan="5"></td></tr>';
+  }).join("") : "")
+  +'<tr class="table__row total"><td class="table__cell" colspan="2">'+(ppl.length>1?'Combined — reference only':'Total — '+esc(ppl[0]))+'</td><td class="table__cell r num">'+money(t.total)+'</td><td class="table__cell" colspan="5"></td></tr>';
+
+  var warn = "";
+  if(t.missing) warn = '<div class="note"><strong>'+t.missing+' row'+(t.missing>1?'s':'')+' without written evidence.</strong> Fine if you can substantiate another way, but worth resolving before lodgment.</div>';
+  if(t.overlap.length){
+    var ow = OWNERS.filter(function(o){return t.overlapBy[o]>0;});
+    warn += '<div class="note"><strong>'+plural(t.overlap.length,"phone & internet row")+' left out of the total ('+money(t.overlap.reduce(function(a,e){return a+e.portion;},0))+').</strong> '
+      +esc(ow.join(" and "))+(ow.length>1?' have':' has')+' working from home hours logged, and the fixed rate already covers phone, internet, data, energy and stationery — claiming them here as well would be a double claim. '
+      +'If the actual cost method suits better, that is a switch to make with your agent; this tool only models the fixed rate. <button class="linkbtn" data-go="s07a">Working from home</button></div>';
+  }
+  if(t.depr.length) warn += '<div class="note acc"><strong>'+t.depr.length+' item'+(t.depr.length>1?'s':'')+' over '+money(DEPR_THRESHOLD)+'</strong> moved to Decline in value and excluded from the total above. For a shared purchase the test is applied to each person\'s share.'
+    +(t.depr.some(function(e){ return isAbnHolder(e.o); }) ? ' <strong>Bought for the ABN?</strong> Record it under Business instead — the $300 rule is for employee assets, and a business asset under '+money(rate("iawo"))+' is written off in full.' : '')+'</div>';
+
+  return '<h2>Work-related &amp; other <span class="sharetag">D4–D10</span>'+whoSuffix()+'</h2><p class="sub">Work-related expenses claimed as an immediate deduction. A shared purchase is entered once and split — each person sees only their share.</p>'
+    +warn
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content">'
+    +'<thead class="table__header"><tr class="table__row"><th class="table__column">Date</th><th class="table__column">Supplier</th><th class="table__column r">'+(ppl.length>1?'Amount':'Your share')+'</th><th class="table__column r">GST</th><th class="table__column">Label</th><th class="table__column">Taxpayer</th><th class="table__column r">Evidence</th><th class="table__column"></th></tr></thead>'
+    +'<tbody class="table__body tops">'+foot+'</tbody><tbody class="table__body">'+body+'</tbody></table></div>'
+    +entryHTML(SECTIONS.filter(function(s){return s.id==="s07";})[0])+'</div>';
+}
+function whoSuffix(){ return state.person===HOUSEHOLD ? '' : ' <span style="color:var(--muted);font-weight:500">— '+esc(state.person)+'</span>'; }
+
+function abnLine(){
+  return people().filter(isAbnHolder).map(function(o){
+    var bits = [gstRegistered(o) ? 'GST registered, '+basisOf(o)+' basis' : 'not registered for GST', 'income counts when '+(incomeBasisOf(o)==="receipts"?'received':'invoiced')];
+    var p = psiOf(o), psi = p==="applies" ? '<span class="chip chip--sm chip--warning">PSI rules apply</span>' : (p==="psb" ? 'personal services business' : (p==="notpsi" ? 'not PSI' : '<span class="chip chip--sm chip--warning">PSI not assessed</span>'));
+    return '<div class="nextline"><strong>'+esc(o)+'\'s ABN</strong> · '+bits.join(' · ')+' · '+psi+' <button class="linkbtn" data-go="setup">Change in Setup</button></div>';
+  }).join("");
+}
+function abnSettings(){
+  var hs = people().filter(function(o){ return isAbnHolder(o); });
+  if(!hs.length) return "";
+  return '<div class="card card--default" style="padding:14px 18px"><h3 style="margin:0 0 10px;font-size:15px">ABN settings</h3><div class="row" style="display:flex;gap:18px;flex-wrap:wrap">'
+    + hs.map(function(o){
+      var t = withOwner(o, function(){ return rollingTurnover(o); }), pct = Math.min(100, t/rate("gstReg")*100);
+      return '<div style="min-width:280px;flex:1">'
+        + fld(esc(o)+"'s ABN — GST",'<select class="input input--secondary" data-gstreg="'+esc(o)+'"><option value="1"'+(gstRegistered(o)?' selected':'')+'>Registered for GST</option><option value="0"'+(!gstRegistered(o)?' selected':'')+'>Not registered for GST</option></select>')
+        + '<div style="height:8px"></div>'
+        + fld("Business income counts",'<select class="input input--secondary" data-incbasis="'+esc(o)+'"><option value="receipts"'+(incomeBasisOf(o)==="receipts"?' selected':'')+'>When it is received</option><option value="earnings"'+(incomeBasisOf(o)!=="receipts"?' selected':'')+'>When it is invoiced</option></select>')
+        + (!gstRegistered(o) ? '<div class="meter meter--sm '+(pct>=90?'meter--warning':'meter--accent')+'"><div class="meter__track"><div class="meter__fill" style="width:'+pct.toFixed(1)+'%"></div></div></div><div class="sharetag" style="margin-top:4px">GST turnover '+money(t)+' of '+money(rate("gstReg"))+' — register within 21 days of reaching it</div>' : '')
+        + '</div>';
+    }).join("")
+    + '</div><p class="hint">Receiving income is the usual basis for a sole trader selling their own services; invoicing suits a business with stock or staff. Confirm with your agent. Not registered for GST: expenses count including GST, and there is no BAS.</p></div>';
+}
+function psiCards(){
+  var hs = people().filter(function(o){ return isAbnHolder(o); });
+  if(!hs.length) return "";
+  var opts = [["","Not assessed yet"],["notpsi","Not PSI — income isn't mainly for my personal skills or effort"],["psb","PSI, but I'm a personal services business (results test, or 80% rule plus another test)"],["applies","PSI rules apply"]];
+  return '<div class="card card--default" style="padding:14px 18px"><h3 style="margin:0 0 4px;font-size:15px">Personal services income — '+fyLabel()+'</h3>'
+    +'<p style="margin:0 0 10px;font-size:13px;color:var(--muted)">Income that is mainly a reward for your own skills or effort — typical for freelance design — is PSI. Unless you pass the results test, or the 80% rule plus one other test, the PSI rules apply and some deductions are denied. The decision is yours or your agent\'s; this only changes what the totals count. '
+    +'<a class="linkbtn" href="https://www.ato.gov.au/businesses-and-organisations/income-deductions-and-concessions/personal-services-income/working-out-if-the-psi-rules-apply" target="_blank" rel="noopener">ATO: working out if the PSI rules apply</a></p>'
+    +'<div class="row" style="display:flex;gap:14px;flex-wrap:wrap">'+hs.map(function(o){
+      return fld(esc(o)+"'s ABN",'<select class="input input--secondary" data-psi="'+esc(o)+'" style="width:100%;max-width:420px">'+opts.map(function(x){ return '<option value="'+x[0]+'"'+(psiOf(o)===x[0]?' selected':'')+'>'+esc(x[1])+'</option>'; }).join("")+'</select>');
+    }).join("")+'</div></div>';
+}
+function renderBusiness(){
+  function subline(r){
+    var bits = []; if(r.desc) bits.push(esc(r.desc)); if(r.direction==="expense" && r.bcat) bits.push(esc(r.bcat)); if(people().length>1) bits.push(esc(ownerOf(r))+"'s ABN");
+    return (bits.length ? '<br><span style="color:var(--muted);font-size:12px">'+bits.join(" · ")+'</span>' : '')+flags(r);
+  }
+  var b = businessTotals(), rs = b.rows, multi = people().length>1;
+  var byCat = {}; if(b.homeOffice) byCat["Home office running costs (fixed rate)"] = b.homeOffice; rs.forEach(function(r){ if(r.direction!=="expense") return; if(b.pool.indexOf(r)>-1 || b.psiDenied.indexOf(r)>-1) return; var pc = r.apportion==null?100:Number(r.apportion); if(isNaN(pc)) pc=100; var k=r.bcat||BIZ_CATS[0]; byCat[k]=(byCat[k]||0)+((Number(r.amount)||0)-(r.noGst?0:(Number(r.gst)||0)))*(pc/100); });
+  var catHTML = Object.keys(byCat).length ? '<div class="card card--default" style="padding:12px 16px"><div class="navlabel" style="padding:0 0 6px">Expenses by return category</div><table class="table__content hh" style="min-width:0">'+Object.keys(byCat).sort().map(function(k){ return '<tr class="table__row"><td class="table__cell" style="padding:5px 0">'+esc(k)+'</td><td class="table__cell r num" style="padding:5px 0">'+money(byCat[k])+'</td></tr>'; }).join("")+'</table></div>' : '';
+  var lockedQs = [];
+  people().forEach(function(o){ QUARTERS.forEach(function(q,i){ if(isLocked(i,o)) lockedQs.push((multi?o+" ":"")+"Q"+(i+1)); }); });
+  var needInv = rs.filter(function(r){ return r.direction==="expense" && gstRegistered(ownerOf(r)) && (Number(r.amount)||0)>82.5 && !r.doc; }).length;
+  function flags(r){
+    var out="";
+    if(r.bcat===ASSET_CAT) out += assetCost(r) >= rate("iawo") ? ' <span class="chip chip--sm chip--warning">'+money(rate("iawo"))+' or more — pooled, for the agent</span>' : ' <span class="chip chip--sm chip--accent">written off in full</span>';
+    if(PSI_DENIED.indexOf(r.bcat)>-1 && psiOf(ownerOf(r))==="applies") out += ' <span class="chip chip--sm chip--warning">not deductible under PSI rules</span>';
+    if(r.direction==="income" && !gstRegistered(ownerOf(r)) && !r.noGst && Number(r.gst)>0) out += ' <span class="chip chip--sm chip--danger">GST recorded but the ABN isn\'t registered</span>';
+    if(notYetDerived(r)) out += ' <span class="chip chip--sm chip--warning">not received — not counted yet</span>';
+    else if(gstRegistered(ownerOf(r)) && basisOf(ownerOf(r))==="cash" && r.paid==="") out += ' <span class="chip chip--sm chip--warning">unpaid — not on a BAS yet</span>';
+    return out;
+  }
+  var body = rs.length ? rs.map(function(r){
+    var pc = r.apportion==null?100:r.apportion;
+    function paidLine(editable){
+      if(basisOf(ownerOf(r))!=="cash") return "";
+      var pv = r.paid===undefined ? r.date : r.paid;
+      if(!editable) return '<br><span class="sharetag">'+(pv?'paid '+fmtDate(pv):'unpaid')+'</span>';
+      return '<br><label class="sharetag" style="display:flex;gap:4px;align-items:center;margin-top:2px">paid <input type="date" class="input input--secondary cell" style="width:128px;text-align:left" data-edit="paid" data-id="'+r.id+'" value="'+(pv||"")+'" aria-label="Date paid"></label>';
+    }
+    if(rowLocked(r)){
+      return '<tr class="table__row lockedrow">'
+        +'<td class="table__cell num">'+fmtDate(r.date)+paidLine(false)+'</td>'
+        +'<td class="table__cell">'+(r.direction==="income"?'<span class="chip chip--sm chip--accent">in</span>':'<span class="chip chip--sm chip--default">out</span>')+'</td>'
+        +'<td class="table__cell"><strong>'+esc(r.party)+'</strong>'+subline(r)+'</td>'
+        +'<td class="table__cell r num">'+money(r.amount)+'</td>'
+        +'<td class="table__cell r num">'+(r.noGst?'<span class="chip chip--sm chip--default">'+GST_FREE_NOTE+'</span>':money(r.gst))+'</td>'
+        +'<td class="table__cell r num">'+(r.direction==="expense"?pc+"%":"—")+'</td>'
+        +'<td class="table__cell r">'+(r.doc?'<span class="chip chip--sm chip--accent">invoice</span>':'<span class="chip chip--sm chip--default">none</span>')+'</td>'
+        +'<td class="table__cell r"><span class="chip chip--sm chip--default" title="Reopen it to change this row.">'+lockLabel(r)+'</span></td>'
+        +'</tr>';
+    }
+    return '<tr class="table__row">'
+      +'<td class="table__cell num">'+fmtDate(r.date)+paidLine(true)+'</td>'
+      +'<td class="table__cell">'+(r.direction==="income"?'<span class="chip chip--sm chip--accent">in</span>':'<span class="chip chip--sm chip--default">out</span>')+'</td>'
+      +'<td class="table__cell"><strong>'+esc(r.party)+'</strong>'+subline(r)+'</td>'
+      +'<td class="table__cell r num"><input class="input input--secondary cell num" inputmode="decimal" aria-label="Amount" data-edit="amount" data-id="'+r.id+'" value="'+(Number(r.amount)||0).toFixed(2)+'"></td>'
+      +'<td class="table__cell r num"><input class="input input--secondary cell num" inputmode="decimal" aria-label="GST" placeholder="'+GST_FREE_NOTE+'" data-edit="gst" data-id="'+r.id+'" value="'+(r.noGst?"":(Number(r.gst)||0).toFixed(2))+'"></td>'
+      +'<td class="table__cell r num">'+(r.direction==="expense"?'<input class="input input--secondary cell pc num" inputmode="numeric" aria-label="Business use %" data-edit="apportion" data-id="'+r.id+'" value="'+pc+'">%':"—")+'</td>'
+      +(function(){ var need = r.amount>82.5 && r.direction==="expense" && gstRegistered(ownerOf(r)); return '<td class="table__cell r"><button class="tagbtn chip chip--sm'+(r.doc?' chip--accent':(need?' chip--warning':' chip--default'))+'" data-doc="'+r.id+'" title="'+(gstRegistered(ownerOf(r))?'Click to toggle':'Not registered for GST — a receipt is enough')+'">'+(r.doc?(gstRegistered(ownerOf(r))?'invoice':'receipt'):(need?'needed':'none'))+'</button></td>'; })()
+      +'<td class="table__cell r">'+rowActions(r)+'</td>'
+      +'</tr>';
+  }).join("") : '<tr class="table__row"><td class="table__cell" colspan="8"><div class="empty">Nothing here yet. Add the first row below.</div></td></tr>';
+
+  var foot = (multi?'<tr class="table__row"><td class="table__cell" colspan="8" style="font-size:12px;color:var(--muted)">Combined across both ABN holders — for reference only. Each return and each BAS uses one person\'s figures.</td></tr>':'')+'<tr class="table__row"><td class="table__cell" colspan="3">Total business income <span class="sharetag">excl. GST, received</span></td><td class="table__cell r num">'+money(b.sales)+'</td><td class="table__cell r num">'+money(b.gstOnSales)+'</td><td class="table__cell" colspan="3"></td></tr>'
+    +'<tr class="table__row"><td class="table__cell" colspan="3">Total business expenses <span class="sharetag">'+(people().every(function(o){return !isAbnHolder(o)||gstRegistered(o);})?'excl. GST':(people().every(function(o){return !isAbnHolder(o)||!gstRegistered(o);})?'incl. GST — not registered':'excl. GST where registered'))+', business-use portion</span></td><td class="table__cell r num">'+money(b.expenses)+'</td><td class="table__cell r num">'+money(b.gstOnPurchases)+'</td><td class="table__cell" colspan="3"></td></tr>'
+    +'<tr class="table__row total"><td class="table__cell" colspan="3">'+(b.sales-b.expenses>=0?'Net business income':'Net business loss')+'</td><td class="table__cell r num">'+money(b.sales-b.expenses)+'</td><td class="table__cell" colspan="4"></td></tr>';
+
+  return '<h2>Business income &amp; expenses <span class="sharetag">item 15 · P8</span>'+whoSuffix()+'</h2><p class="sub">Business income and expenses under the ABN. Rows are entered including GST; the totals exclude it, because that is what goes on the return — the GST itself goes to the activity statement. GST registration, when income counts and PSI are set in Setup.</p>'
+    +(b.homeOffice?'<div class="nextline">Includes '+money(b.homeOffice)+' of home office running costs — '+b.homeHours+' business hours at '+money(wfhRate())+' from <button class="linkbtn" data-go="s07a">Working from home</button>.</div>':'')
+    +(b.unpaidIncome?'<div class="nextline">'+money(b.unpaidIncome)+' invoiced but not yet received — it counts in the year it is paid.</div>':'')
+    +reopenNotes()
+    +abnLine()
+    +(b.pool.length?'<div class="note"><strong>'+plural(b.pool.length,"asset")+' at '+money(rate("iawo"))+' or more ('+money(b.poolTotal)+') left out of expenses.</strong> Above the instant asset write-off threshold, a small business usually puts the asset in the general small business pool and deducts it over time — one for your agent. The GST credit is still claimed on the BAS.</div>':'')
+    +(b.psiDenied.length?'<div class="note"><strong>'+money(b.psiDeniedTotal)+' not deducted because the PSI rules apply.</strong> Home rent, mortgage interest, rates and land tax, and payments to associates for non-principal work, can\'t be claimed against personal services income.</div>':'')
+    +(lockedQs.length?'<div class="note acc"><strong>'+lockedQs.join(", ")+' lodged and locked.</strong> Rows dated in a locked quarter are read-only, and new rows can\'t be dated into it. Reopen a quarter from the BAS page if the books need to change.</div>':'')
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content">'
+    +'<thead class="table__header"><tr class="table__row"><th class="table__column">Date</th><th class="table__column"></th><th class="table__column">Party</th><th class="table__column r">Amount inc GST</th><th class="table__column r">GST</th><th class="table__column r">Bus. use</th><th class="table__column r">Evidence</th><th class="table__column"></th></tr></thead>'
+    +'<tbody class="table__body tops">'+foot+'</tbody><tbody class="table__body">'+body+'</tbody></table></div>'
+    +entryHTML(SECTIONS.filter(function(s){return s.id==="s05";})[0])+'</div>'+catHTML;
+}
+
+function renderWFH(){
+  var w = wfhTotals(), rs = w.rows, ppl = people(), ov = deductionTotals().overlap;
+  var body = rs.length ? rs.map(function(r){
+    return '<tr class="table__row"><td class="table__cell num">'+fmtDate(r.date)+'</td><td class="table__cell">'+esc(ownerOf(r))+'</td>'
+      +'<td class="table__cell">'+(wfhUse(r)==="business"?'<span class="chip chip--sm chip--accent">business</span>'+(isAbnHolder(ownerOf(r))?'':' <span class="chip chip--sm chip--warning">no ABN rows</span>'):'<span class="chip chip--sm chip--default">employment</span>')+'</td>'
+      +'<td class="table__cell r num">'+(Number(r.hours)||0)+'</td>'
+      +'<td class="table__cell r num">'+money((Number(r.hours)||0)*w.rate)+'</td>'
+      +'<td class="table__cell r">'+rowActions(r)+'</td></tr>';
+  }).join("") : '<tr class="table__row"><td class="table__cell" colspan="6"><div class="empty">No hours logged yet.</div></td></tr>';
+
+  function ln(label, h, cls){ return '<tr class="table__row'+(cls?' '+cls:'')+'"><td class="table__cell" colspan="3">'+label+'</td><td class="table__cell r num">'+h+'</td><td class="table__cell r num">'+money(h*w.rate)+'</td><td class="table__cell"></td></tr>'; }
+  var foot = ppl.map(function(o){
+    return ln(esc(o)+' — employment <span class="sharetag">D5 deduction</span>', w.by[o]) + (w.byBiz[o] ? ln(esc(o)+' — business <span class="sharetag">in Business expenses</span>', w.byBiz[o]) : '');
+  }).join("")
+  + ln(ppl.length>1?'Combined — reference only':'Total — '+esc(ppl[0]), w.hours+w.bizHours, 'total');
+
+  var rs0 = rateStatus("wfh");
+  return '<h2>Working from home expenses'+whoSuffix()+'</h2><p class="sub">Fixed rate method, for employees and sole traders alike. Each week is tagged employment (a D5 deduction) or business (an expense against the ABN), and hours are always one person\'s — currently at '+money(w.rate)+' per hour'+(rs0==="carried"?' <span class="chip chip--sm chip--warning">not yet published for '+fyLabel()+' — carried forward</span>':'')+'.</p>'
+    +'<div class="nextline">The fixed rate already covers <strong>home and mobile phone, internet and data, electricity and gas, stationery and computer consumables</strong> — none of these can be claimed separately. Equipment and furniture still can. Record actual hours for the whole year; the ATO doesn\'t accept estimates.</div>'
+    +(ov.length?'<div class="note">'+plural(ov.length,"phone & internet row")+' in Deductions overlap these hours and are left out of the total. <button class="linkbtn" data-go="s07">Review them</button></div>':'')
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content">'
+    +'<thead class="table__header"><tr class="table__row"><th class="table__column">Week beginning</th><th class="table__column">Taxpayer</th><th class="table__column">For</th><th class="table__column r">Hours</th><th class="table__column r">Claim</th><th class="table__column"></th></tr></thead>'
+    +'<tbody class="table__body tops">'+foot+'</tbody><tbody class="table__body">'+body+'</tbody></table></div>'
+    +entryHTML(SECTIONS.filter(function(s){return s.id==="s07a";})[0])+'</div>';
+}
+
+function renderDepr(){
+  var t = deductionTotals(), d = t.depr, ppl = people();
+  var body = d.length ? d.map(function(e){
+    var r = e.r;
+    return '<tr class="table__row"><td class="table__cell num">'+fmtDate(r.date)+'</td>'
+      +'<td class="table__cell"><strong>'+esc(r.party)+'</strong>'+(r.desc?'<br><span style="color:var(--muted);font-size:12px">'+esc(r.desc)+'</span>':'')+'</td>'
+      +'<td class="table__cell r num">'+money(e.portion)+'</td><td class="table__cell">'+whoCell(e)+'</td>'
+      +'<td class="table__cell r">'+rowActions(r)+'</td></tr>';
+  }).join("") : '<tr class="table__row"><td class="table__cell" colspan="5"><div class="empty">Nothing over '+money(DEPR_THRESHOLD)+' yet.</div></td></tr>';
+
+  var tops = (ppl.length>1 ? ppl.map(function(o){ return '<tr class="table__row"><td class="table__cell" colspan="2">'+esc(o)+'</td><td class="table__cell r num">'+money(t.deprBy[o])+'</td><td class="table__cell" colspan="2"></td></tr>'; }).join("") : "")
+    +'<tr class="table__row total"><td class="table__cell" colspan="2">'+(ppl.length>1?'Combined cost of assets held':'Cost of assets held — '+esc(ppl[0]))+'</td><td class="table__cell r num">'+money(t.deprTotal)+'</td><td class="table__cell" colspan="2"></td></tr>';
+  return '<h2>Decline in value — depreciating assets'+whoSuffix()+'</h2><p class="sub">Work assets where a person\'s share of the cost is more than '+money(DEPR_THRESHOLD)+'. These cannot be claimed as an immediate deduction, so they sit apart from the deductions total.</p>'
+    +'<div class="note"><strong>For your agent to assess.</strong> Effective life and the prime cost or diminishing value method are judgement calls this tool deliberately does not make.</div>'
+    +'<div class="nextline">These are <strong>employee</strong> assets, where the $300 test applies. An asset bought for an ABN belongs in Business as a “'+esc(ASSET_CAT)+'” — under '+money(rate("iawo"))+' it is written off in full. <button class="linkbtn" data-go="s05">Business</button></div>'
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content">'
+    +'<thead class="table__header"><tr class="table__row"><th class="table__column">Date acquired</th><th class="table__column">Asset</th><th class="table__column r">Cost</th><th class="table__column">Taxpayer</th><th class="table__column"></th></tr></thead>'
+    +'<tbody class="table__body tops">'+tops+'</tbody>'
+    +'<tbody class="table__body">'+body+'</tbody></table></div></div>';
+}
+
+function renderNotes(){
+  var rs = rowsIn("s08");
+  var body = rs.length ? rs.map(function(r){
+    return '<tr class="table__row"><td class="table__cell num" style="width:120px">'+fmtDate(r.date)+'</td><td class="table__cell">'+esc(r.desc)+'</td>'
+      +'<td class="table__cell r">'+rowActions(r)+'</td></tr>';
+  }).join("") : '<tr class="table__row"><td class="table__cell" colspan="3"><div class="empty">Nothing noted.</div></td></tr>';
+  return '<h2>Notes for the agent</h2><p class="sub">Anything the agent should know that doesn\'t belong in a schedule.</p>'
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content"><tbody class="table__body">'+body+'</tbody></table></div>'
+    +entryHTML(SECTIONS.filter(function(s){return s.id==="s08";})[0])+'</div>';
+}
+
+// ---------- BAS lodgment lock ----------
+// prefs.lodged.qN = {status:"lodged"|"reopened", figures:{sales,gstOnSales,gstOnPurchases,net}, log:[{at,action,reason}]}
+function lodgeKey(i,o){ return state.fy+":"+(o||basOwner())+":q"+(i+1); }
+function lodgeRec(i,o){
+  o = o || basOwner();
+  var L = state.prefs.lodged || {};
+  var v = L[lodgeKey(i,o)];
+  if(v==null && state.fy===2027) v = L[o+":q"+(i+1)];                    // saved before years were split out
+  if(v==null && state.fy===2027 && o===OWNERS[0]) v = L["q"+(i+1)];     // saved before the per-person split
+  if(!v) return null;
+  if(v===true) return {status:"lodged", figures:null, log:[]};
+  return v;
+}
+function isLodged(i,o){ return !!lodgeRec(i,o); }                       // has been lodged at some point
+function isLocked(i,o){ var r=lodgeRec(i,o); return !!r && r.status==="lodged"; }
+function isReopened(i,o){ var r=lodgeRec(i,o); return !!r && r.status==="reopened"; }
+function quarterIndexOf(date){
+  if(fyOf(date)!==state.fy) return -1;
+  for(var i=0;i<QUARTERS.length;i++){ if(date>=QUARTERS[i][0] && date<=QUARTERS[i][1]) return i; }
+  return -1;
+}
+// Which date puts a business row on a BAS: date paid on a cash basis, invoice date on accrual.
+// r.paid undefined = rows saved before this existed → treat the invoice date as paid.  r.paid "" = not yet paid.
+function basisOf(o){ return (state.prefs.basisBy||{})[o] || state.prefs.basis || "cash"; }
+function basDate(r){
+  if(basisOf(ownerOf(r))!=="cash") return r.date||null;
+  if(r.paid===undefined) return r.date||null;
+  return r.paid || null;
+}
+function lockOfDate(d, o){
+  if(!d) return null;
+  var fy = fyOf(d);
+  return asFY(fy, function(){ var i = quarterIndexOf(d); return i>-1 && isLocked(i,o) ? {fy:fy, i:i, q:QUARTERS[i]} : null; });
+}
+function rowLocked(r){ return !!yearLockOf(r) || (r.section==="s05" && !!lockOfDate(basDate(r), ownerOf(r))); }
+function lockLabel(r){
+  var Y = yearLockOf(r); if(Y) return esc(Y.o)+"'s "+fyLabel(Y.fy)+" return lodged";
+  var L = lockOfDate(basDate(r), ownerOf(r)); return L ? (L.fy!==state.fy?fyLabel(L.fy)+' ':'')+'Q'+(L.i+1)+' BAS locked' : '';
+}
+function rowActions(r){
+  if(rowLocked(r)) return '<span class="chip chip--sm chip--default" title="Reopen it from the Summary (return) or the BAS page (quarter) to change this row.">'+lockLabel(r)+'</span>';
+  return '<span style="white-space:nowrap"><button class="button button--tertiary button--sm button--icon-only" data-editrow="'+r.id+'" title="Edit" aria-label="Edit">✎</button>'
+    +'<button class="button button--tertiary button--sm button--icon-only del" data-del="'+r.id+'" title="'+(ownerOf(r)===SHARED?'Delete the shared row for both of you':'Delete')+'" aria-label="Delete">&times;</button></span>';
+}
+function figuresOf(t){ return {sales:t.sales, gstOnSales:t.gstOnSales, gstOnPurchases:t.gstOnPurchases, net:t.net}; }
+function variance(i){
+  var rec = lodgeRec(i); if(!rec || !rec.figures) return null;
+  var t = quarterBAS(QUARTERS[i]), f = rec.figures;
+  var v = {sales:t.sales-f.sales, gstOnSales:t.gstOnSales-f.gstOnSales, gstOnPurchases:t.gstOnPurchases-f.gstOnPurchases, net:t.net-f.net};
+  v.any = ["sales","gstOnSales","gstOnPurchases","net"].some(function(k){ return Math.abs(v[k])>=0.005; });
+  return v;
+}
+function setLodge(i, status, action, reason){
+  var all = Object.assign({}, state.prefs.lodged||{});
+  var prev = lodgeRec(i) || {log:[]};
+  var rec = {status:status, figures: status==="lodged" ? figuresOf(quarterBAS(QUARTERS[i])) : prev.figures,
+             log:(prev.log||[]).concat([{at:new Date().toISOString(), day:todayISO(), action:action, reason:reason||""}])};
+  all[lodgeKey(i)] = rec; if(state.fy===2027){ delete all[basOwner()+":q"+(i+1)]; if(basOwner()===OWNERS[0]) delete all["q"+(i+1)]; }
+  state.prefs.lodged = all; savePrefs();
+}
+function reopenNotes(){
+  var out="";
+  basHolders().forEach(function(o){ withOwner(o,function(){
+  QUARTERS.forEach(function(q,i){
+    if(!isReopened(i)) return;
+    var v = variance(i);
+    out += '<div class="note"><strong>'+(people().length>1?esc(o)+' — ':'')+'Q'+(i+1)+' '+esc(q[2])+' is reopened after lodgment.</strong> '
+      +(v && v.any ? 'The books now differ from what was lodged — GST position has moved by '+money(v.net)+'. Revise the activity statement with the ATO (or correct it on a later BAS if your agent confirms that is allowed), then re-lock the quarter.'
+                   : 'Nothing has changed from the lodged figures yet. Re-lock the quarter on the BAS page when you are done.')
+      +'</div>';
+  });
+  }); });
+  return out;
+}
+function renderBAS(){
+  var hs = basHolders();
+  var unreg = abnHolders().filter(function(o){ return !gstRegistered(o); });
+  if(!hs.length) return '<h2>Activity statements (BAS) — '+fyLabel()+whoSuffix()+'</h2>'
+    +(unreg.length ? '<div class="note acc"><strong>'+esc(unreg.join(" and "))+(unreg.length>1?' aren\'t':' isn\'t')+' registered for GST</strong>, so there is no activity statement to prepare. The GST turnover meter on the Business page shows how close the ABN is to the '+money(rate("gstReg"))+' registration threshold.</div>' : '')
+    +'<p class="sub">A BAS belongs to one ABN, so it is never combined.</p>'
+    +'<div class="card card--default"><div class="empty">No GST-registered ABN with business rows '+(state.person===HOUSEHOLD?'':'for '+esc(state.person)+' ')+'yet.</div></div>';
+  if(false) return '<h2>Activity statements (BAS) — '+fyLabel()+whoSuffix()+'</h2><p class="sub">A BAS belongs to one ABN, so it is never combined.</p>'
+    +'<div class="card card--default"><div class="empty">No business rows under '+(state.person===HOUSEHOLD?'either ABN':esc(state.person)+'\'s ABN')+' yet. Add them in Business income &amp; expenses and the four quarters appear here.</div></div>';
+  return '<h2>Activity statements (BAS) — '+fyLabel()+whoSuffix()+'</h2><p class="sub">All four quarters, derived entirely from the Business section. A BAS belongs to one ABN, so it is never combined — '+(hs.length>1?'each ABN holder has their own grid and their own locks.':'this grid is '+esc(hs[0])+'\'s.')+'</p>'
+    + hs.map(function(o){ return withOwner(o, function(){ return renderBASFor(o, hs.length>1); }); }).join("");
+}
+function renderBASFor(owner, showName){
+  var unpaid = basisOf(owner)==="cash" ? allRowsIn("s05").filter(function(r){ return ownerOf(r)===owner && r.paid===""; }).length : 0;
+  var cur = currentQuarter(), today = todayISO();
+  var qs = QUARTERS.map(function(q,i){
+    var t = quarterBAS(q);
+    t.i=i; t.days=daysUntil(q[3]); t.lodged=isLodged(i); t.locked=isLocked(i); t.reopened=isReopened(i); t.rec=lodgeRec(i); t.v=variance(i);
+    t.isCur = q===cur; t.future = today < q[0]; t.ended = today > q[1];
+    return t;
+  });
+  var fy = {sales:0,gstOnSales:0,gstOnPurchases:0,net:0,count:0,unsubstantiated:0};
+  qs.forEach(function(t){ for(var k in fy) fy[k]+=t[k]; });
+  var turnover = rollingTurnover(), pct = Math.min(100, turnover/75000*100);
+
+  var notes = "";
+  qs.forEach(function(t){
+    if(t.lodged || t.future) return;
+    if(t.days<-120) return;
+    if(t.days<0) notes += '<div class="note"><strong>Q'+(t.i+1)+' '+esc(t.q[2])+' is overdue by '+Math.abs(t.days)+' days.</strong> Failure to lodge on time penalties accrue at one penalty unit ('+money(rate("pu"))+') per 28 days, capped at five units ('+money(rate("pu")*5)+') for a small business. Lodging online or through an agent can add two weeks'+(t.i===1?' — though not for Q2':'')+'. Mark it lodged below if it has gone in.</div>';
+    else if(t.ended && t.days<=14) notes += '<div class="note"><strong>Q'+(t.i+1)+' '+esc(t.q[2])+' is due in '+t.days+' days.</strong> A nil activity statement still has to be lodged.</div>';
+    else if(t.ended) notes += '<div class="note acc">Q'+(t.i+1)+' '+esc(t.q[2])+' has ended — lodgment due '+fmtDate(t.q[3])+', '+t.days+' days away.</div>';
+  });
+  if(fy.unsubstantiated>0) notes += '<div class="note"><strong>'+money(fy.unsubstantiated)+' of GST credits at risk across the year.</strong> Expenses over $82.50 need a valid tax invoice.</div>';
+
+  function status(t){
+    if(t.reopened) return '<span class="chip chip--sm chip--warning">reopened</span>';
+    if(t.lodged) return '<span class="chip chip--sm chip--accent">lodged · locked</span>';
+    if(t.future) return '<span class="chip chip--sm chip--default">not started</span>';
+    if(!t.ended) return '<span class="chip chip--sm chip--default">in progress</span>';
+    if(t.days<0) return '<span class="chip chip--sm chip--warning">overdue</span>';
+    return '<span class="chip chip--sm chip--warning">to lodge</span>';
+  }
+  function line(code,label,fn,cls){
+    return '<tr'+(cls?' class="'+cls+'"':'')+'><td class="table__cell code">'+code+'</td><td class="table__cell">'+label+'</td>'
+      +qs.map(function(t){ return '<td class="table__cell r num'+(t.isCur?' curq':'')+'">'+fn(t)+'</td>'; }).join("")
+      +'<td class="table__cell r num fycol">'+fn(fy)+'</td></tr>';
+  }
+  function netTxt(t){ return money(Math.abs(t.net))+' <span class="dir">'+(t.net>0?"payable":(t.net<0?"refund":""))+'</span>'; }
+
+  var head = '<thead class="table__header"><tr class="table__row"><th class="table__column"></th><th class="table__column"></th>'+qs.map(function(t){
+      return '<th class="table__column r'+(t.isCur?' curq':'')+'">Q'+(t.i+1)+' · '+esc(t.q[2].replace(/ \d{4}$/,""))+'</th>';
+    }).join("")+'<th class="table__column r">FY total</th></tr></thead>';
+
+  var body = line("G1","Total sales",function(t){return money(t.sales);})
+    + line("1A","GST on sales",function(t){return money(t.gstOnSales);})
+    + line("1B","GST on purchases",function(t){return money(t.gstOnPurchases);})
+    + line("","<strong>GST payable or refund</strong>",netTxt,"total")
+    + line("","GST credits at risk",function(t){return t.unsubstantiated>0?money(t.unsubstantiated):"—";})
+    + line("","Business rows",function(t){return String(t.count);})
+    + '<tr class="table__row"><td class="table__cell code">T7</td><td class="table__cell">PAYG instalment paid <span class="sharetag">typed — from the BAS</span></td>'+qs.map(function(t){
+        var v = paygFor(t.i, owner);
+        return '<td class="table__cell r num'+(t.isCur?' curq':'')+'">'+(t.locked?money(v||0):'<input class="input input--secondary cell num" inputmode="decimal" data-payg="'+t.i+'|'+esc(owner)+'" value="'+(v!=null&&v!==0?Number(v).toFixed(2):'')+'" placeholder="0.00">')+'</td>';
+      }).join("")+'<td class="table__cell r num fycol">'+money(qs.reduce(function(a,t){return a+(Number(paygFor(t.i,owner))||0);},0))+'</td></tr>'
+    + '<tr class="table__row"><td class="table__cell code"></td><td class="table__cell">Lodgment due</td>'+qs.map(function(t){return '<td class="table__cell r num'+(t.isCur?' curq':'')+'">'+fmtDate(t.q[3])+'</td>';}).join("")+'<td class="table__cell"></td></tr>'
+    + '<tr class="table__row"><td class="table__cell code"></td><td class="table__cell">Status</td>'+qs.map(function(t){return '<td class="table__cell r'+(t.isCur?' curq':'')+'">'+status(t)+'</td>';}).join("")+'<td class="table__cell"></td></tr>'
+    + (qs.some(function(t){return t.rec && t.rec.figures;}) ?
+        '<tr class="table__row"><td class="table__cell code"></td><td class="table__cell">GST as lodged</td>'+qs.map(function(t){
+          return '<td class="table__cell r num'+(t.isCur?' curq':'')+'">'+(t.rec&&t.rec.figures?netTxt(t.rec.figures):"—")+'</td>';}).join("")+'<td class="table__cell"></td></tr>'
+       +'<tr class="table__row"><td class="table__cell code"></td><td class="table__cell">Change since lodged</td>'+qs.map(function(t){
+          return '<td class="table__cell r num'+(t.isCur?' curq':'')+'">'+(t.v?(t.v.any?'<span class="chip chip--sm chip--warning">'+money(t.v.net)+'</span>':'none'):"—")+'</td>';}).join("")+'<td class="table__cell"></td></tr>' : '')
+    + '<tr class="table__row"><td class="table__cell code"></td><td class="table__cell">Lodgment</td>'+qs.map(function(t){
+        var btn;
+        if(t.reopened) btn='<button class="button button--primary button--sm" data-ui="relock" data-o="'+esc(owner)+'" data-q="'+t.i+'">Re-lock</button>';
+        else if(t.locked) btn='<button class="button button--tertiary button--sm" data-ui="reopen" data-o="'+esc(owner)+'" data-q="'+t.i+'">Reopen…</button>';
+        else if(t.ended) btn='<button class="button button--primary button--sm" data-ui="lodge" data-o="'+esc(owner)+'" data-q="'+t.i+'">Mark lodged…</button>';
+        else btn='<span style="font-size:12px;color:var(--muted)">after quarter ends</span>';
+        return '<td class="table__cell r'+(t.isCur?' curq':'')+'">'+btn+'</td>';
+      }).join("")+'<td class="table__cell"></td></tr>';
+
+  // confirmation panel — deliberate friction, never a one-click change
+  var panel = "";
+  if(state.ui && state.ui.o===owner){
+    var u = state.ui, t = qs[u.q], nm = esc(owner)+'\'s Q'+(u.q+1)+' '+esc(t.q[2]);
+    var figs = '<table class="table__content baslines" style="min-width:0;margin:8px 0"><tr class="table__row"><td class="table__cell code">G1</td><td class="table__cell">Total sales</td><td class="table__cell r num">'+money(t.sales)+'</td></tr>'
+      +'<tr class="table__row"><td class="table__cell code">1A</td><td class="table__cell">GST on sales</td><td class="table__cell r num">'+money(t.gstOnSales)+'</td></tr>'
+      +'<tr class="table__row"><td class="table__cell code">1B</td><td class="table__cell">GST on purchases</td><td class="table__cell r num">'+money(t.gstOnPurchases)+'</td></tr></table>';
+    var err = state.err ? '<div class="note" style="margin:10px 0 0">'+esc(state.err)+'</div>' : '';
+    if(u.mode==="lodge"){
+      panel = '<div class="card card--default panel"><h3>Mark '+nm+' as lodged and lock it</h3>'
+        +'<p>These are the figures the workpapers hold now. Check they match what was lodged with the ATO — they are saved as the lodged record, and every Business row dated in this quarter becomes read-only.</p>'+figs
+        +'<label class="ck"><input type="checkbox" id="u-ack"> These figures match the activity statement I lodged</label>'+err
+        +'<div class="row"><button class="button button--primary" data-ui-go="1">Lock quarter</button><button class="button button--secondary" data-ui-cancel="1">Cancel</button></div></div>';
+    } else if(u.mode==="reopen"){
+      panel = '<div class="card card--default panel danger"><h3>Reopen '+nm+'</h3>'
+        +'<p><strong>This quarter has been lodged.</strong> Any change to its rows means the books no longer match the ATO\'s record. You will need to revise the activity statement (or correct the error on a later BAS if your agent confirms that is allowed) and then re-lock the quarter. The reason is kept in the quarter\'s history.</p>'
+        +'<div class="f" style="margin:10px 0"><label>Why are you reopening it?</label><input class="input input--secondary" id="u-reason" style="width:100%;max-width:520px" placeholder="e.g. missed Adobe invoice from August"></div>'
+        +'<label class="ck"><input type="checkbox" id="u-ack"> I understand I\'m changing lodged books and will need to reconcile with the ATO</label>'
+        +'<div class="f" style="margin:10px 0"><label>Type Q'+(u.q+1)+' to confirm</label><input class="input input--secondary" id="u-type" style="width:120px" autocomplete="off"></div>'+err
+        +'<div class="row"><button class="button button--danger" data-ui-go="1">Reopen quarter</button><button class="button button--secondary" data-ui-cancel="1">Cancel</button></div></div>';
+    } else {
+      panel = '<div class="card card--default panel"><h3>Re-lock '+nm+'</h3>'
+        +(t.v && t.v.any
+          ? '<p><strong>The figures have changed since lodgment</strong> — GST position moved by '+money(t.v.net)+'. Only re-lock once the revised figures below have gone to the ATO; they replace the lodged record.</p>'
+          : '<p>Nothing changed while the quarter was open. Re-locking keeps the original lodged record.</p>')+figs
+        +(t.v && t.v.any ? '<label class="ck"><input type="checkbox" id="u-ack"> The ATO now holds these revised figures</label>' : '')+err
+        +'<div class="row"><button class="button button--primary" data-ui-go="1">Re-lock quarter</button><button class="button button--secondary" data-ui-cancel="1">Cancel</button></div></div>';
+    }
+  }
+
+  var hist = [];
+  qs.forEach(function(t){ (t.rec&&t.rec.log||[]).forEach(function(l){ hist.push({q:t.i,l:l}); }); });
+  hist.sort(function(a,b){ return (b.l.at||"").localeCompare(a.l.at||""); });
+  var histHTML = hist.length ? '<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content"><thead class="table__header"><tr class="table__row"><th class="table__column">When</th><th class="table__column">Quarter</th><th class="table__column">Action</th><th class="table__column">Reason</th></tr></thead><tbody class="table__body">'
+    +hist.map(function(h){ return '<tr class="table__row"><td class="table__cell num">'+fmtDate(h.l.day||(h.l.at||"").slice(0,10))+'</td><td class="table__cell">Q'+(h.q+1)+'</td><td class="table__cell">'+esc(h.l.action)+'</td><td class="table__cell">'+esc(h.l.reason||"—")+'</td></tr>'; }).join("")
+    +'</tbody></table></div></div>' : '';
+
+
+  return (showName?'<h3 style="margin:22px 0 10px;font-size:15px">'+esc(owner)+'\'s ABN</h3>':'')
+    +'<div class="nextline">Accounting for GST on '+(basisOf(owner)==="cash"?'a cash':'an accrual')+' basis <button class="linkbtn" data-go="setup">Change in Setup</button></div>'
+    +(showName?'':reopenNotes())+notes
+    +'<div class="table-root table-root--primary bas4wrap"><div class="table__scroll-container"><table class="table__content baslines bas4">'+head+'<tbody class="table__body">'+body+'</tbody></table></div></div>'
+    +panel+histHTML
+    +(isPastFY()?'':'<div class="card card--default" style="padding:15px">'
+    +'<div class="stat" style="border:0;padding:0">'
+    +'<div class="k">Current GST turnover</div>'
+    +'<div class="v num">'+money(turnover)+'</div>'
+    +'<div class="n">this month and the previous 11, excluding GST, against the '+money(rate("gstReg"))+' GST registration threshold</div>'
+    +'<div class="meter meter--sm meter--accent"><div class="meter__track"><div class="meter__fill" style="width:'+pct.toFixed(1)+'%"></div></div></div>'
+    +'</div></div>')
+    +'<p class="hint">'+(basisOf(owner)==="cash"?'Cash basis: rows fall into a quarter by the date paid, so an invoice from one quarter paid in the next is reported in the next. Unpaid rows stay off every BAS until paid.':'Accrual basis: rows fall into a quarter by the invoice date.')+' '+fy.count+' business row'+(fy.count===1?'':'s')+' this financial year.'
+    +(unpaid?' <strong>'+plural(unpaid,"unpaid row")+'.</strong>':'')+'</p>';
+}
+
+function asPerson(o, fn){ var prev=state.person; state.person=o; try{ return fn(); } finally{ state.person=prev; } }
+function personFigures(o){
+  return asPerson(o, function(){
+    var d = deductionTotals(), w = wfhTotals(), b = businessTotals();
+    var hasAbn = abnHolders().length>0, today = todayISO();
+    var tx0 = taxFigures(o);
+    var bAll = businessTotals();
+    var f = {ccOver: tx0.ccRoom<0 ? 1 : 0, overlap:d.overlap.length, psiUnset: hasAbn && isAbnHolder(o) && !psiOf(o) ? 1 : 0, pool:bAll.pool.length,
+            unpaid: allRowsIn("s05").filter(function(r){ return ownerOf(r)===o && r.paid==="" && rowFY(r)===state.fy; }).length,
+            superPending:tx0.superPending, imm:d.total, wfh:w.claim, hours:w.hours, weeks:w.rows.length, ded:d.total+w.claim, depr:d.deprTotal, deprN:d.depr.length,
+            sales:b.sales, exp:b.expenses, net:b.sales-b.expenses, hasAbn:hasAbn, missing:d.missing,
+            needInv:b.rows.filter(function(r){ return r.direction==="expense" && gstRegistered(ownerOf(r)) && (Number(r.amount)||0)>82.5 && !r.doc; }).length,
+            basOpen:0, basReopened:0, next:null, gstYear:null};
+    f.hasBas = hasAbn && gstRegistered(o) && isAbnHolder(o);
+    if(!f.hasBas){ f.needInv = 0; }
+    if(f.hasBas){
+      f.gstYear = 0;
+      QUARTERS.forEach(function(q,i){
+        var t = quarterBAS(q,o); f.gstYear += t.net;
+        if(isReopened(i,o)) f.basReopened++;
+        if(!isLodged(i,o)){
+          if(today > q[1]) f.basOpen++;
+          if(!f.next && today >= q[0]) f.next = {i:i, q:q, t:t, days:daysUntil(q[3]), ended: today>q[1]};
+        }
+      });
+    }
+    return f;
+  });
+}
+// where we are in the year being viewed — decides what the Summary leads with
+function phase(){
+  var cur = currentFY(), m = Number(todayISO().slice(5,7));
+  if(state.fy===cur) return (m===5||m===6) ? "yearend" : "during";
+  if(state.fy===cur-1) return "prep";
+  return "past";
+}
+function returnKey(o, fy){ return (fy||state.fy)+":"+o; }
+// prefs.returns["fy:o"] = {status:"lodged"|"reopened", day, figures:{taxable,assessable,deductions,paid}, log:[{day,action,reason}]}
+function retRec(o, fy){
+  var v = (state.prefs.returns||{})[returnKey(o,fy)]; if(!v) return null;
+  if(!v.status) return {status:"lodged", day:v.day, figures:null, log:[{day:v.day, action:"Marked lodged", reason:""}]};   // saved before locking existed
+  return v;
+}
+function returnLodged(o, fy){ return !!retRec(o, fy); }
+function returnLocked(o, fy){ var r=retRec(o, fy); return !!r && r.status==="lodged"; }
+function returnReopened(o, fy){ var r=retRec(o, fy); return !!r && r.status==="reopened"; }
+function retFigures(o){ var f = taxFigures(o); return {taxable:f.taxable, assessable:f.assessable, deductions:f.deductions, paid:f.withheld+f.payg}; }
+function setReturn(o, status, action, reason){
+  var all = Object.assign({}, state.prefs.returns||{}), prev = retRec(o) || {log:[]};
+  all[returnKey(o)] = {status:status, day: status==="lodged" && action!=="Re-locked, no change" ? todayISO() : prev.day || todayISO(),
+    figures: status==="lodged" ? retFigures(o) : prev.figures,
+    log:(prev.log||[]).concat([{day:todayISO(), action:action, reason:reason||""}])};
+  state.prefs.returns = all; savePrefs();
+}
+function retVariance(o){
+  var r = retRec(o); if(!r || !r.figures) return null;
+  var now = retFigures(o), d = now.taxable - r.figures.taxable;
+  return {now:now, then:r.figures, taxable:d, any: Math.abs(d)>=0.005 || Math.abs(now.deductions-r.figures.deductions)>=0.005};
+}
+// A lodged return locks every row that feeds it — shared rows feed both returns, so either lock holds them.
+function yearLockOf(r){
+  if(r.section==="s08") return null;
+  var fy = rowFY(r), os = ownerOf(r)===SHARED ? OWNERS : [ownerOf(r)];
+  for(var i=0;i<os.length;i++){ if(returnLocked(os[i], fy)) return {fy:fy, o:os[i]}; }
+  return null;
+}
+function nextLine(o, f, showName){
+  if(!f.hasBas || !f.next) return "";
+  var n = f.next, g = n.t.net;
+  return '<div class="nextline">'+(showName?'<strong>'+esc(o)+'</strong> · ':'')+'Next BAS: <strong>Q'+(n.i+1)+' '+esc(n.q[2])+'</strong> · due '+fmtDate(n.q[3])
+    +' · '+(n.days<0?Math.abs(n.days)+' days overdue':n.days+' days')+(n.ended?'':' · quarter still running')
+    +' · GST so far '+money(Math.abs(g))+' '+(g>=0?'payable':'refund')
+    +' <button class="linkbtn" data-go="bas">Open</button></div>';
+}
+function readinessRows(F){
+  // F: [{o, f}] — one column per person
+  function line(label, key, go, okText){
+    return '<tr class="table__row"><td class="table__cell">'+label+'</td>'+F.map(function(x){
+      var v = x.f[key];
+      if(v==null) return '<td class="table__cell r"><span style="color:var(--muted)">—</span></td>';
+      return '<td class="table__cell r">'+(v>0?'<span class="chip chip--sm chip--warning">'+v+' to fix</span>':'<span class="chip chip--sm chip--accent">'+okText+'</span>')+'</td>';
+    }).join("")+'<td class="table__cell r"><button class="linkbtn" data-go="'+go+'">Open</button></td></tr>';
+  }
+  F.forEach(function(x){
+    if(!x.f.hasAbn){ x.f = Object.assign({}, x.f, {needInv:null, basOpen:null, basReopened:null, psiUnset:null, pool:null, unpaid:null}); }
+    else if(!x.f.hasBas){ x.f = Object.assign({}, x.f, {needInv:null, basOpen:null, basReopened:null}); }
+  });
+  return line("Deduction rows without written evidence","missing","s07","all evidenced")
+    + line("Business expenses over $82.50 without a tax invoice","needInv","s05","all invoiced")
+    + line("BAS quarters ended but not marked lodged","basOpen","bas","up to date")
+    + line("BAS quarters reopened and not re-locked","basReopened","bas","none")
+    + line("Super contributions without notice of intent + acknowledgement","superPending","d12","all claimable")
+    + line("Concessional super over the cap","ccOver","tests","within cap")
+    + line("Phone &amp; internet rows overlapping the WFH fixed rate","overlap","s07","none")
+    + line("Personal services income status not assessed","psiUnset","s05","assessed")
+    + line("Business assets over the instant asset write-off threshold","pool","s05","none")
+    + line("Invoices not yet paid or received","unpaid","s05","none")
+    + '<tr class="table__row"><td class="table__cell">Depreciating assets for the agent to assess</td>'+F.map(function(x){ return '<td class="table__cell r num">'+x.f.deprN+'</td>'; }).join("")+'<td class="table__cell r"><button class="linkbtn" data-go="s07b">Open</button></td></tr>'
+    + '<tr class="table__row"><td class="table__cell">Working from home — weeks logged</td>'+F.map(function(x){ return '<td class="table__cell r num">'+x.f.weeks+'</td>'; }).join("")+'<td class="table__cell r"><button class="linkbtn" data-go="s07a">Open</button></td></tr>';
+}
+function readinessCard(F, title){
+  return '<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content hh" style="min-width:520px"><thead class="table__header"><tr class="table__row"><th class="table__column">'+esc(title)+'</th>'
+    +F.map(function(x){ return '<th class="table__column r">'+esc(x.o)+'</th>'; }).join("")+'<th class="table__column"></th></tr></thead><tbody class="table__body">'+readinessRows(F)+'</tbody></table></div></div>';
+}
+var YE_CHECKS = [
+  ["super","Personal super contributions made, and the notice of intent to claim sent to the fund"],
+  ["buy","Work purchases you were going to make anyway are paid for before 30 June"],
+  ["prepay","Subscriptions or memberships worth prepaying have been considered"],
+  ["gifts","Donation receipts collected"],
+  ["wfh","Working from home hours logged up to 30 June"],
+  ["evid","Receipts and tax invoices chased for every flagged row"]
+];
+function yearEndCard(F){
+  var ck = state.prefs.checks || {};
+  return '<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content hh" style="min-width:520px"><thead class="table__header"><tr class="table__row"><th class="table__column">Before 30 June — only counts if done by year end</th>'
+    +F.map(function(x){ return '<th class="table__column r">'+esc(x.o)+'</th>'; }).join("")+'</tr></thead><tbody class="table__body">'
+    +YE_CHECKS.map(function(c){
+      return '<tr class="table__row"><td class="table__cell">'+esc(c[1])+'</td>'+F.map(function(x){
+        var k = state.fy+":"+x.o+":"+c[0];
+        return '<td class="table__cell r"><input type="checkbox" data-check="'+esc(k)+'"'+(ck[k]?' checked':'')+' style="min-width:auto" aria-label="'+esc(x.o)+'"></td>';
+      }).join("")+'</tr>';
+    }).join("")+'</tbody></table></div>'
+    +'<p class="hint" style="padding:0 14px 12px;margin:6px 0 0">Prompts, not advice — whether any of these is worth doing is a question for your agent.</p></div>';
+}
+function prepCard(F){
+  var due = (state.fy)+"-10-31", dd = daysUntil(due), ph = phase();
+  var intro = ph==="prep" && !F.every(function(x){return returnLodged(x.o);})
+    ? '<h3>'+fyLabel()+' has ended — getting the return'+(F.length>1?'s':'')+' ready</h3><p>Self-lodged returns are due '+fmtDate(due)+' ('+(dd<0?Math.abs(dd)+' days ago':dd+' days away')+'); a registered agent usually has longer. Clear the readiness list below, then mark each return lodged — that locks every row feeding it.</p>'
+    : '<h3>'+fyLabel()+' tax return'+(F.length>1?'s':'')+'</h3><p>A lodged return locks every row that feeds it, including shared rows. Reopening is for amendments.</p>';
+  var rows = F.map(function(x){
+    var o = x.o, r = retRec(o), v = retVariance(o), btn;
+    var status = !r ? '<span class="chip chip--sm chip--default">not lodged</span>'
+      : (r.status==="lodged" ? '<span class="chip chip--sm chip--accent">lodged '+fmtDate(r.day)+' · locked</span>' : '<span class="chip chip--sm chip--warning">reopened — amendment</span>');
+    if(!r) btn = '<button class="button button--primary button--sm" data-rui="lodge" data-o="'+esc(o)+'">Mark lodged…</button>';
+    else if(r.status==="lodged") btn = '<button class="button button--secondary button--sm" data-rui="reopen" data-o="'+esc(o)+'">Reopen…</button>';
+    else btn = '<button class="button button--primary button--sm" data-rui="relock" data-o="'+esc(o)+'">Re-lock…</button>';
+    var change = v ? (v.any ? '<span class="chip chip--sm chip--warning">taxable income '+(v.taxable>=0?'+':'−')+money(Math.abs(v.taxable)).replace("-","")+' since lodged</span>' : '<span class="sharetag">no change since lodged</span>') : '';
+    return '<tr class="table__row"><td class="table__cell"><strong>'+esc(o)+'</strong></td><td class="table__cell">'+status+'</td><td class="table__cell r num">'+(v?money(v.then.taxable):'—')+'</td><td class="table__cell">'+change+'</td><td class="table__cell r">'+btn+'</td></tr>';
+  }).join("");
+  var hist = [];
+  F.forEach(function(x){ var r=retRec(x.o); (r&&r.log||[]).forEach(function(l){ hist.push({o:x.o, l:l}); }); });
+  hist.sort(function(a,b){ return (b.l.day||"").localeCompare(a.l.day||""); });
+  return '<div class="card card--default panel">'+intro
+    +'<div class="table__scroll-container"><table class="table__content hh" style="min-width:560px"><thead class="table__header"><tr class="table__row"><th class="table__column"></th><th class="table__column">Status</th><th class="table__column r">Taxable income as lodged</th><th class="table__column"></th><th class="table__column"></th></tr></thead><tbody class="table__body">'+rows+'</tbody></table></div>'
+    +returnPanel()
+    +(hist.length?'<details style="margin-top:10px"><summary class="sharetag" style="cursor:pointer">History ('+hist.length+')</summary><table class="table__content hh" style="min-width:0;margin-top:6px"><tbody class="table__body">'+hist.map(function(h){ return '<tr class="table__row"><td class="table__cell num">'+fmtDate(h.l.day)+'</td><td class="table__cell">'+esc(h.o)+'</td><td class="table__cell">'+esc(h.l.action)+'</td><td class="table__cell">'+esc(h.l.reason||"—")+'</td></tr>'; }).join("")+'</tbody></table></details>':'')
+    +'</div>';
+}
+function returnPanel(){
+  var u = state.rui; if(!u) return "";
+  var o = u.o, v = retVariance(o), f = retFigures(o), err = state.rerr ? '<div class="note" style="margin:10px 0 0">'+esc(state.rerr)+'</div>' : '';
+  var figs = '<table class="table__content baslines" style="min-width:0;margin:8px 0;max-width:420px"><tr class="table__row"><td class="table__cell">Assessable income</td><td class="table__cell r num">'+money(f.assessable)+'</td></tr><tr class="table__row"><td class="table__cell">Deductions</td><td class="table__cell r num">'+money(f.deductions)+'</td></tr><tr class="table__row total"><td class="table__cell"><strong>Taxable income</strong></td><td class="table__cell r num"><strong>'+money(f.taxable)+'</strong></td></tr></table>';
+  var pf = personFigures(o), open = [["missing","deduction rows without evidence"],["needInv","expenses missing a tax invoice"],["basOpen","BAS quarters not marked lodged"],["superPending","super contributions without notice of intent"],["overlap","phone rows overlapping WFH"],["psiUnset","PSI status not assessed"],["pool","assets over the write-off threshold"],["unpaid","invoices not yet paid"],["ccOver","super over the cap"]].filter(function(k){ return pf[k[0]]>0; }).map(function(k){ return pf[k[0]]+" "+k[1]; });
+  if(u.mode==="lodge") return '<div class="card card--default panel" style="margin-top:12px"><h3>Mark '+esc(o)+'\'s '+fyLabel()+' return as lodged</h3><p>These figures are saved as the lodged record, and every row feeding this return — including shared rows — becomes read-only. Check them against the notice of assessment or what your agent lodged.</p>'
+    +(open.length?'<div class="note" style="margin:8px 0">Still open in the readiness list: '+esc(open.join("; "))+'. You can still lock — just be sure these were dealt with in the return.</div>':'')+figs
+    +'<label class="ck"><input type="checkbox" id="r-ack"> These match the return that was lodged</label>'+err
+    +'<div class="row"><button class="button button--primary" data-rui-go="1">Lock '+fyLabel()+'</button><button class="button button--secondary" data-rui-cancel="1">Cancel</button></div></div>';
+  if(u.mode==="reopen") return '<div class="card card--default panel danger" style="margin-top:12px"><h3>Reopen '+esc(o)+'\'s '+fyLabel()+' return</h3><p><strong>This return has been lodged.</strong> Any change from here means the workpapers no longer match the ATO\'s assessment, and you will need to lodge an amendment. The reason is kept in the history.</p>'
+    +'<div class="f" style="margin:10px 0"><label>Why are you reopening it?</label><input class="input input--secondary" id="r-reason" style="width:100%;max-width:520px" placeholder="e.g. missed a dividend statement"></div>'
+    +'<label class="ck"><input type="checkbox" id="r-ack"> I understand an amendment will be needed</label>'
+    +'<div class="f" style="margin:10px 0"><label>Type AMEND to confirm</label><input class="input input--secondary" id="r-type" style="width:120px" autocomplete="off"></div>'+err
+    +'<div class="row"><button class="button button--danger" data-rui-go="1">Reopen return</button><button class="button button--secondary" data-rui-cancel="1">Cancel</button></div></div>';
+  return '<div class="card card--default panel" style="margin-top:12px"><h3>Re-lock '+esc(o)+'\'s '+fyLabel()+' return</h3>'
+    +(v && v.any ? '<p><strong>Taxable income has moved by '+money(v.taxable)+' since lodgment.</strong> Re-lock once the amendment has gone to the ATO; these figures replace the lodged record.</p>'+figs+'<label class="ck"><input type="checkbox" id="r-ack"> The amendment has been lodged</label>' : '<p>Nothing changed while the return was open. Re-locking keeps the original lodged record.</p>')+err
+    +'<div class="row"><button class="button button--primary" data-rui-go="1">Re-lock</button><button class="button button--secondary" data-rui-cancel="1">Cancel</button></div></div>';
+}
+function returnNotes(){
+  var out = "";
+  people().forEach(function(o){
+    if(!returnReopened(o)) return; var v = retVariance(o);
+    out += '<div class="note"><strong>'+esc(o)+'\'s '+fyLabel()+' return is reopened after lodgment.</strong> '+(v&&v.any?'Taxable income has moved by '+money(v.taxable)+' — an amendment is needed.':'Nothing has changed yet.')+' Re-lock it from the Summary when done.</div>';
+  });
+  return out;
+}
+function basReminders(){
+  var out="", today = todayISO(), multi = people().length>1;
+  basHolders().forEach(function(o){
+    QUARTERS.forEach(function(q,i){
+      if(isLodged(i,o) || today <= q[1]) return;
+      var dd = daysUntil(q[3]); if(dd < -120) return;
+      var nm = (multi?esc(o)+' — ':'')+'Q'+(i+1);
+      out += dd<0
+        ? '<div class="note"><strong>'+nm+' BAS overdue by '+Math.abs(dd)+' days</strong> — '+esc(q[2])+'.</div>'
+        : (dd<=14 ? '<div class="note"><strong>'+nm+' BAS due in '+dd+' days</strong> — '+esc(q[2])+', due '+fmtDate(q[3])+'.</div>' : '');
+    });
+  });
+  return out;
+}
+var PROTO_NOTE = '<div class="note acc">This is a prototype for testing the workpaper model and the calculations. '
+    +'Thresholds and rates are hard-coded and should be confirmed with a registered tax agent before any figure is relied on.</div>';
+
+function phaseBlocks(F){
+  var ph = phase(), allLodged = F.every(function(x){ return returnLodged(x.o); });
+  var top = "", bottom = "";
+  if(ph==="prep" || ph==="past") top += prepCard(F);
+  if(ph==="past" || (ph==="prep" && allLodged)) bottom += "";
+  var title = ph==="during" ? "Readiness — worth keeping clear as you go"
+            : ph==="yearend" ? "Readiness — clear these before 30 June"
+            : "Readiness — what still stands between these workpapers and the return";
+  var ready = readinessCard(F, title), ye = ph==="yearend" ? yearEndCard(F) : "";
+  return {ph:ph, top:top, ready:ready, ye:ye};
+}
+function phaseSub(ph){
+  return ph==="during" ? "Year to date. The BAS is the only thing on a quarterly clock, so it gets one line; everything else builds toward the return."
+       : ph==="yearend" ? "The year is nearly over, so this page now leads with what has to be finished before 30 June."
+       : ph==="prep" ? "The year has ended. These are the full-year figures for the return."
+       : "A closed year, shown for reference.";
+}
+var TODO = [
+  ["missing","deduction row{s} without written evidence","s07"],
+  ["needInv","business expense{s} over $82.50 without a tax invoice","s05"],
+  ["basOpen","BAS quarter{s} ended but not marked lodged","bas"],
+  ["basReopened","BAS quarter{s} reopened, not re-locked","bas"],
+  ["superPending","super contribution{s} missing a notice of intent or acknowledgement","d12"],
+  ["ccOver","concessional super over the cap","tests"],
+  ["overlap","phone & internet row{s} overlapping the WFH fixed rate","s07"],
+  ["psiUnset","personal services income status not assessed","setup"],
+  ["pool","business asset{s} over the write-off threshold — for your agent","s05"],
+  ["unpaid","invoice{s} not yet paid or received","s05"]
+];
+function todoCard(F){
+  var multi = F.length>1, items = [], clear = 0, total = 0;
+  TODO.forEach(function(t){
+    F.forEach(function(x){
+      var v = x.f[t[0]]; if(v==null) return; total++;
+      if(!(v>0)){ clear++; return; }
+      var tx = (t[0]==="ccOver"||t[0]==="psiUnset") ? t[1].charAt(0).toUpperCase()+t[1].slice(1) : v+" "+t[1].replace("{s}", v===1?"":"s");
+      items.push({who:x.o, text:tx, go:t[2]});
+    });
+  });
+  var u = unconfirmed(); if(u.length && !people().every(function(o){return returnLocked(o);})) items.push({text:plural(u.length,"schedule")+" not confirmed for "+fyLabel(), go:"setup"});
+  var car = carriedRates(); if(car.length) items.push({text:plural(car.length,"rate")+" for "+fyLabel()+" not yet published by the ATO — using last year's", go:"rates", soft:true});
+  var ph = phase();
+  if(ph==="prep" || ph==="past") F.forEach(function(x){ if(!returnLodged(x.o)) items.push({who:x.o, text:fyLabel()+" return not marked lodged", go:"tests"}); });
+  return '<div class="todo card card--default"><div class="todohead"><h3>'+(items.length?'To do':'All clear')+'</h3><span class="sharetag">'+clear+' of '+total+' checks clear</span></div>'
+    + (items.length ? '<ul>'+items.map(function(i){
+        return '<li'+(i.soft?' class="soft"':'')+'><span>'+(multi&&i.who?'<strong>'+esc(i.who)+'</strong> · ':'')+esc(i.text)+'</span><button class="linkbtn" data-go="'+i.go+'">Open</button></li>';
+      }).join("")+'</ul>' : '<p class="sub" style="margin:0">Nothing needs attention right now.</p>')
+    + '</div>';
+}
+function overviewHead(){
+  var ph = phase();
+  return '<p class="sub">'+(ph==="during"?'Year to date.':ph==="yearend"?'The year ends 30 June — the list leads with what has to be done before then.':ph==="prep"?'The year has ended — these are the full-year figures for the return.':'A closed year, shown for reference.')+'</p>';
+}
+function renderSummary(){
+  if(state.person===HOUSEHOLD) return renderHousehold();
+  var o = state.person, f = personFigures(o), tx = taxFigures(o), ph = phase(), ytd = (ph==="during"||ph==="yearend");
+  var cards = [
+    {k:"Taxable income estimate", v:money(tx.taxable), n:money(tx.assessable)+" income less "+money(tx.deductions)+" deductions"},
+    {k:"Deductions"+(ytd?" so far":""), v:money(tx.deductions), n:money(f.imm)+" work, "+money(f.wfh)+" home office, "+money(tx.otherDed)+" other"},
+  ];
+  if(f.hasAbn) cards.push({k:(f.net>=0?"Net business income":"Net business loss")+(ytd?" so far":""), v:money(f.net), n:money(f.sales)+" in, "+money(f.exp)+" out, excl. GST"});
+  cards.push({k:"Paid to the ATO", v:money(tx.withheld+tx.payg), n:money(tx.withheld)+" withheld, "+money(tx.payg)+" instalments"});
+  return '<h2>Overview'+whoSuffix()+'</h2>'+overviewHead()
+    +returnNotes()+reopenNotes()+basReminders()
+    +(ph==="yearend" ? yearEndCard([{o:o,f:f}]) : '')
+    +todoCard([{o:o, f:f}])
+    +nextLine(o,f,false)
+    +strip(cards);
+}
+function renderHousehold(){
+  var F = OWNERS.map(function(o){ var f=personFigures(o), tx=taxFigures(o); f.taxable=tx.taxable; f.paid=tx.withheld+tx.payg; f.allDed=tx.deductions; return {o:o, f:f}; }), ph = phase(), ytd = (ph==="during"||ph==="yearend");
+  function row(label, key, opts){
+    opts = opts||{};
+    var vals = F.map(function(x){ return x.f[key]; });
+    var cells = vals.map(function(v){ return '<td class="table__cell r num">'+(v==null?'—':money(v))+'</td>'; }).join("");
+    var comb = opts.noCombine ? '<td class="table__cell r"><span class="sharetag">'+esc(opts.noCombine)+'</span></td>'
+      : '<td class="table__cell r num fycol">'+money(vals.reduce(function(a,v){return a+(v||0);},0))+'</td>';
+    return '<tr class="table__row'+(opts.total?' total':'')+'"><td class="table__cell">'+label+'</td>'+cells+comb+'</tr>';
+  }
+  var table = '<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content hh">'
+    +'<thead class="table__header"><tr class="table__row"><th class="table__column">'+(ytd?'Year to date':'Full year')+'</th>'+OWNERS.map(function(o){return '<th class="table__column r">'+esc(o)+'</th>';}).join("")+'<th class="table__column r">Combined</th></tr></thead><tbody class="table__body">'
+    +row("Deductions","allDed")
+    +row("Net business income or loss <span class=\"sharetag\">excl. GST</span>","net")
+    +row("<strong>Taxable income estimate</strong>","taxable",{total:true})
+    +row("Paid to the ATO <span class=\"sharetag\">withheld + instalments</span>","paid")
+    +(ytd ? "" : row("GST for the year <span class=\"sharetag\">BAS, not a return figure</span>","gstYear",{noCombine:"per ABN"}))
+    +'</tbody></table></div></div>';
+  return '<h2>Overview</h2>'+overviewHead()
+    +returnNotes()+reopenNotes()+basReminders()
+    +(ph==="yearend" ? yearEndCard(F) : '')
+    +todoCard(F)
+    +F.map(function(x){ return nextLine(x.o, x.f, true); }).join("")
+    +table;
+}
+
+// ---------- compare years & find ----------
+var SEC_NAME = {s05:"Business", s07:"Deductions", s07a:"Working from home", s08:"Extra information"};
+SECTIONS.forEach(function(x){ if(x.kind==="gen") SEC_NAME[x.id]=x.name; });
+function yearFigures(fy){
+  return asFY(fy, function(){
+    var d = deductionTotals(), w = wfhTotals(), b = businessTotals();
+    var byLabel = {};
+    d.entries.forEach(function(e){ var k=catLabel(e.r.cat)||"Unlabelled"; byLabel[k]=(byLabel[k]||0)+e.portion; });
+    var tx = state.person===HOUSEHOLD ? (function(){ var a=taxFigures(OWNERS[0]), b=taxFigures(OWNERS[1]), o={}; for(var k in a) if(typeof a[k]==="number") o[k]=a[k]+b[k]; return o; })() : taxFigures(state.person);
+    return {tx:tx, byLabel:byLabel, imm:d.total, wfh:w.claim, hours:w.hours, rate:w.rate, ded:d.total+w.claim, depr:d.deprTotal,
+            sales:b.sales, exp:b.expenses, net:b.sales-b.expenses,
+            rows: state.rows.filter(function(r){ return rowFY(r)===fy && mine(r); }).length};
+  });
+}
+function renderHistory(){
+  var fys = fysWithData(), Y = {}; fys.forEach(function(f){ Y[f]=yearFigures(f); });
+  var labels = {}; fys.forEach(function(f){ for(var k in Y[f].byLabel) labels[k]=1; });
+  labels = Object.keys(labels).sort();
+
+  function line(label, get, opts){
+    opts = opts||{};
+    var prev = null;
+    var cells = fys.map(function(f){
+      var v = get(Y[f]) || 0, ch = "";
+      if(prev!=null && (v!==0 || prev!==0)){
+        var diff = v-prev;
+        ch = '<br><span class="sharetag">'+(Math.abs(diff)<0.005?'no change':(diff>0?'+':'−')+money(Math.abs(diff)).replace("-","")+(prev?' · '+(diff>0?'+':'−')+Math.abs(Math.round(diff/Math.abs(prev)*100))+'%':''))+'</span>';
+      }
+      prev = v;
+      return '<td class="table__cell r num'+(f===state.fy?' curq':'')+'">'+(v===0&&!opts.total?'<span style="color:var(--muted)">—</span>':money(v))+ch+'</td>';
+    }).join("");
+    return '<tr class="table__row'+(opts.total?' total':'')+'"><td class="table__cell'+(opts.indent?' ind':'')+'">'+label+'</td>'+cells+'</tr>';
+  }
+  var head = '<thead class="table__header"><tr class="table__row"><th class="table__column"></th>'+fys.map(function(f){
+      return '<th class="table__column r'+(f===state.fy?' curq':'')+'"><button class="linkbtn" data-fy="'+f+'" data-view="summary" title="Open this year">'+fyLabel(f)+'</button></th>'; }).join("")+'</tr></thead>';
+  var body = labels.map(function(k){ return line(esc(k), function(y){return y.byLabel[k];}, {indent:true}); }).join("")
+    + line("<strong>Immediate deductions</strong>", function(y){return y.imm;}, {total:true})
+    + line("Working from home", function(y){return y.wfh;})
+    + line("<strong>Total deductions</strong>", function(y){return y.ded;}, {total:true})
+    + line("Decline in value — cost of assets acquired", function(y){return y.depr;})
+    + line("Total business income", function(y){return y.sales;})
+    + line("Total business expenses", function(y){return y.exp;})
+    + line("<strong>Net business income or loss</strong>", function(y){return y.net;}, {total:true})
+    + line("Other income (salary, interest, dividends, ESS, foreign)", function(y){return y.tx.income;})
+    + line("Net capital gain", function(y){return y.tx.cgtNet;})
+    + line("Net rental income", function(y){return y.tx.rentIn;})
+    + line("Other deductions (D1, D3, D7–8, D12, D15)", function(y){return y.tx.otherDed;})
+    + line("<strong>Taxable income estimate</strong>", function(y){return y.tx.taxable;}, {total:true})
+    + '<tr class="table__row"><td class="table__cell" style="color:var(--muted)">Rows recorded</td>'+fys.map(function(f){return '<td class="table__cell r num'+(f===state.fy?' curq':'')+'" style="color:var(--muted)">'+Y[f].rows+'</td>';}).join("")+'</tr>';
+
+  var only = fys.length<2 ? '<div class="note acc"><strong>Only '+fyLabel(fys[0])+' has rows so far.</strong> Pick an earlier year from the menu at the top and add its rows — a row\'s year comes from its date — and it will appear here as a column.</div>' : '';
+
+  return '<h2>Compare &amp; find'+whoSuffix()+'</h2><p class="sub">Every year lives in the same ledger, so nothing has to be archived or restored. Figures follow the person selected at the top.</p>'
+    +'<div class="card card--default" style="padding:14px 16px"><div class="f"><label for="h-q">How did I record this? Search supplier, description or label across every year</label>'
+    +'<input class="input input--secondary" id="h-q" style="max-width:460px" placeholder="e.g. Adobe, monitor, self-education" autocomplete="off" value="'+esc(state.hq||"")+'"></div>'
+    +'<div id="h-res" style="margin-top:12px"></div></div>'
+    +only
+    +'<div class="table-root table-root--primary bas4wrap"><div class="table__scroll-container"><table class="table__content hh bas4">'+head+'<tbody class="table__body">'+body+'</tbody></table></div></div>'
+    +'<p class="hint">Small figures show the change on the year before. Click a year heading to open it.</p>';
+}
+function searchRows(q){
+  q = q.trim().toLowerCase(); if(q.length<2) return [];
+  return state.rows.filter(function(r){
+    if(!mine(r) && r.section!=="s08") return false;
+    var hay = [r.party, r.desc, r.kind, r.bcat, catLabel(r.cat), SEC_NAME[r.section]].join(" ").toLowerCase();
+    return hay.indexOf(q)>-1;
+  }).sort(function(a,b){ return (b.date||"").localeCompare(a.date||""); });
+}
+function renderSearch(){
+  var box = el("h-res"); if(!box) return;
+  var q = state.hq||"", rs = searchRows(q);
+  if(q.trim().length<2){ box.innerHTML = '<span class="hint" style="margin:0">Type at least two characters.</span>'; return; }
+  if(!rs.length){ box.innerHTML = '<span class="hint" style="margin:0">Nothing recorded matching “'+esc(q)+'” in any year.</span>'; return; }
+  // how it was treated, at a glance
+  var tally = {};
+  rs.forEach(function(r){
+    var k = r.section==="s07" ? ((Number(r.amount)||0)>DEPR_THRESHOLD && ownerOf(r)!==SHARED ? "Decline in value" : catLabel(r.cat)) : SEC_NAME[r.section];
+    tally[k]=(tally[k]||0)+1;
+  });
+  var chips = Object.keys(tally).sort(function(a,b){return tally[b]-tally[a];}).map(function(k){ return '<span class="chip chip--sm chip--accent" style="margin-right:6px">'+esc(k)+' × '+tally[k]+'</span>'; }).join("");
+  box.innerHTML = '<div style="margin-bottom:10px">'+chips+'</div>'
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content" style="min-width:620px"><thead class="table__header"><tr class="table__row"><th class="table__column">Year</th><th class="table__column">Date</th><th class="table__column">Supplier / party</th><th class="table__column">Recorded as</th><th class="table__column">Taxpayer</th><th class="table__column r">Amount</th></tr></thead><tbody class="table__body">'
+    +rs.slice(0,60).map(function(r){
+      var as = r.section==="s07" ? catLabel(r.cat) : (r.section==="s05" ? "Business "+(r.direction==="income"?"income":"expense")+(r.direction==="expense"&&r.apportion!=null&&Number(r.apportion)!==100?" · "+r.apportion+"% business use":"") : SEC_NAME[r.section]);
+      return '<tr class="table__row"><td class="table__cell"><button class="linkbtn" data-fy="'+rowFY(r)+'" data-view="'+r.section+'">'+fyLabel(rowFY(r))+'</button></td>'
+        +'<td class="table__cell num">'+fmtDate(r.date)+'</td>'
+        +'<td class="table__cell"><strong>'+esc(r.party||"—")+'</strong>'+(r.desc?'<br><span style="color:var(--muted);font-size:12px">'+esc(r.desc)+'</span>':'')+'</td>'
+        +'<td class="table__cell"><span class="chip chip--sm chip--default">'+esc(as)+'</span></td>'
+        +'<td class="table__cell">'+esc(r.section==="s08"?"":ownerOf(r))+(ownerOf(r)===SHARED?' <span class="sharetag">'+(r.share==null?50:r.share)+'/'+(100-(r.share==null?50:r.share))+'</span>':'')+'</td>'
+        +'<td class="table__cell r num">'+(r.amount!=null?money(r.amount):(r.hours!=null?r.hours+" h":(r.gross!=null?money(r.gross):(r.km!=null?r.km+" km":(r.premiums!=null?money(r.premiums):(r.proceeds!=null?money(r.proceeds):""))))))+'</td></tr>';
+    }).join("")+'</tbody></table></div></div>'
+    +(rs.length>60?'<p class="hint">Showing the 60 most recent of '+rs.length+'.</p>':'');
+}
+function wireHistory(){
+  var q = el("h-q"); if(!q) return;
+  q.addEventListener("input", function(){ state.hq = q.value; renderSearch(); });
+  renderSearch();
+}
+// how the same supplier was labelled before — across every year
+function supplierMemory(name){
+  name = (name||"").trim().toLowerCase(); if(name.length<2) return null;
+  var tally={}, n=0, last=null;
+  allRowsIn("s07").forEach(function(r){
+    if((r.party||"").trim().toLowerCase()!==name) return;
+    var k = r.cat; tally[k]=(tally[k]||0)+1; n++;
+    if(!last || (r.date||"")>(last.date||"")) last=r;
+  });
+  if(!n) return null;
+  var best = Object.keys(tally).sort(function(a,b){return tally[b]-tally[a];})[0];
+  return {cat:best, n:n, labels:Object.keys(tally).length, last:last};
+}
+
+// ---------- generic schedules ----------
+// Every schedule below is data: fields, what to total, and how it feeds the return.
+// t: text | money | num | sel | check | date.  tax: how the totals feed personFigures.
+function carRate(){ var r = state.prefs.carRates && state.prefs.carRates[state.fy]; if(r!=null) return Number(r)||0; return rate("car"); }
+var CAR_CAP_KM = 5000;   // see RATEBOOK.carCap
+
+var GEN = {
+  i01:{ shared:false, dateLabel:"Statement date", doc:"income statement",
+    sub:"One line per employer, copied from the income statement in myGov. The ATO pre-fills these; the job here is to check them and keep the figures the income tests need.",
+    fields:[{k:"party",l:"Employer",t:"text",w:"w-txt",req:true},{k:"gross",l:"Gross payments",t:"money",req:true},{k:"withheld",l:"Tax withheld",t:"money"},
+            {k:"allow",l:"Allowances (item 2)",t:"money"},{k:"rfb",l:"Reportable fringe benefits",t:"money"},{k:"resc",l:"Reportable employer super",t:"money"},{k:"sg",l:"Employer super (SG)",t:"money"}],
+    tax:{income:["gross","allow"], withheld:["withheld"], rfb:["rfb"], resc:["resc"], sg:["sg"]} },
+  i10:{ shared:true, dateLabel:"Statement date", doc:"statement",
+    sub:"One line per account. Joint accounts go in once as Shared with the split — the ATO splits joint interest the same way.",
+    fields:[{k:"party",l:"Bank / account",t:"text",w:"w-txt",req:true},{k:"gross",l:"Gross interest",t:"money",req:true},{k:"withheld",l:"TFN amounts withheld",t:"money"}],
+    tax:{income:["gross"], withheld:["withheld"]} },
+  i11:{ shared:true, dateLabel:"Payment date", doc:"statement",
+    sub:"One line per dividend. Franking credits count as income and come back as a refundable offset.",
+    fields:[{k:"party",l:"Company / fund",t:"text",w:"w-txt",req:true},{k:"unfranked",l:"Unfranked",t:"money"},{k:"franked",l:"Franked",t:"money"},{k:"credit",l:"Franking credit",t:"money"},{k:"withheld",l:"TFN withheld",t:"money"}],
+    tax:{income:["unfranked","franked","credit"], withheld:["withheld"], offsets:["credit"]} },
+  i12:{ shared:false, dateLabel:"Taxing point", doc:"ESS statement",
+    sub:"Only if either of you holds shares or rights in an employer. The discount is income in the year of the taxing point — a common misread on the ESS statement.",
+    fields:[{k:"party",l:"Employer / plan",t:"text",w:"w-txt",req:true},{k:"kind",l:"Plan type",t:"sel",opts:["Taxed-upfront","Deferral scheme","Start-up concession"]},{k:"discount",l:"Discount amount",t:"money",req:true}],
+    tax:{income:["discount"]} },
+  i18:{ shared:true, dateLabel:"Date sold", doc:"contract / statement",
+    sub:"Shares, ETFs, crypto and property. Enter the cost base and proceeds; the gain, the 12-month discount and the net position are worked out. Losses only ever offset gains.",
+    fields:[{k:"party",l:"Asset",t:"text",w:"w-txt",req:true},{k:"acq",l:"Date acquired",t:"date"},{k:"cost",l:"Cost base",t:"money",req:true},{k:"proceeds",l:"Proceeds",t:"money",req:true}],
+    calc:function(r){ var g=(Number(r.proceeds)||0)-(Number(r.cost)||0); var held = r.acq && r.date && monthsBetween(r.acq,r.date)>=12; return {gain:g, disc: g>0&&held ? g/2 : 0, net: g>0&&held ? g/2 : g, held:held}; },
+    cols:[{k:"gain",l:"Gain / loss"},{k:"net",l:"After discount"}], tax:{cgt:"net"} },
+  i20:{ shared:false, dateLabel:"Date", doc:"statement",
+    sub:"Overseas accounts, shares or work. Foreign tax already paid may come back as an offset.",
+    fields:[{k:"party",l:"Source",t:"text",w:"w-txt",req:true},{k:"country",l:"Country",t:"text",w:"w-pc"},{k:"gross",l:"Gross (AUD)",t:"money",req:true},{k:"ftax",l:"Foreign tax paid",t:"money"}],
+    tax:{income:["gross"], offsets:["ftax"]} },
+  i21:{ shared:true, dateLabel:"Date", doc:"invoice / statement",
+    sub:"Rent received and every expense on the property. Co-owned property goes in as Shared with the ownership split. A net loss here counts as a net investment loss for the income tests.",
+    fields:[{k:"party",l:"Property",t:"text",w:"w-txt",req:true},{k:"direction",l:"Direction",t:"sel",opts:["Income","Expense"]},
+            {k:"cat",l:"Category",t:"sel",opts:["Rent received","Other rental income","Interest on loan","Council & water rates","Body corporate","Insurance","Repairs & maintenance","Agent fees","Depreciation (capital works)","Other expense"]},{k:"amount",l:"Amount",t:"money",req:true}],
+    net:{plus:function(r){return r.direction==="Income";}, k:"amount"}, tax:{rentNet:true} },
+  d01:{ shared:false, dateLabel:"Date", doc:"diary entry",
+    sub:"Cents per kilometre method: work trips only, never home to work. Capped at "+CAR_CAP_KM+" km per car per year. Keep a diary of trips.",
+    fields:[{k:"party",l:"Trip / purpose",t:"text",w:"w-txt",req:true},{k:"km",l:"Kilometres",t:"num",req:true}],
+    calc:function(r){ return {claim:(Number(r.km)||0)*carRate()}; }, cols:[{k:"claim",l:"Claim"}],
+    total:function(rs, o){ var km = rs.reduce(function(a,e){return a+(Number(e.r.km)||0)*e.share;},0); var capped = Math.min(km, CAR_CAP_KM); return {km:km, capped:capped, claim:capped*carRate(), over:km>CAR_CAP_KM}; },
+    rate:{label:"Cents per km $/km", get:carRate, set:function(v){ state.prefs.carRates=Object.assign({},state.prefs.carRates||{}); state.prefs.carRates[state.fy]=v; }},
+    tax:{ded:"claim"} },
+  d03:{ shared:false, dateLabel:"Date", doc:"receipt",
+    sub:"Only occupation-specific, protective or registered uniform clothing counts — ordinary clothes never do, even for work. Laundry is claimable per load without receipts up to a small limit.",
+    fields:[{k:"party",l:"Item / supplier",t:"text",w:"w-txt",req:true},{k:"kind",l:"Type",t:"sel",opts:["Protective","Occupation-specific","Registered uniform","Laundry"]},{k:"amount",l:"Amount",t:"money",req:true}],
+    tax:{ded:"amount"} },
+  d07:{ shared:false, dateLabel:"Date", doc:"statement",
+    sub:"Costs of earning interest or dividends — a margin loan, investment advice, brokerage that isn\'t part of a cost base. Not the shares themselves.",
+    fields:[{k:"party",l:"Description",t:"text",w:"w-desc",req:true},{k:"kind",l:"Label",t:"sel",opts:["D7 Interest deductions","D8 Dividend deductions"]},{k:"amount",l:"Amount",t:"money",req:true}],
+    tax:{ded:"amount", nil:true} },
+  d12:{ shared:false, dateLabel:"Contribution date", doc:"fund confirmation",
+    sub:"After-tax contributions you want to claim. The claim fails unless the fund has acknowledged a notice of intent before the return is lodged — both boxes must be ticked to count it.",
+    fields:[{k:"party",l:"Fund",t:"text",w:"w-txt",req:true},{k:"amount",l:"Amount",t:"money",req:true},{k:"noi",l:"Notice of intent sent",t:"check"},{k:"ack",l:"Fund acknowledged",t:"check"}],
+    rowOk:function(r){ return !!(r.noi && r.ack); }, okText:"counted only when both are ticked", tax:{ded:"amount", onlyOk:true} },
+  d15:{ shared:false, dateLabel:"Date", doc:"receipt",
+    sub:"Mainly income protection premiums paid outside super. Anything else that doesn\'t fit a D-label goes here with a clear description.",
+    fields:[{k:"party",l:"Description",t:"text",w:"w-desc",req:true},{k:"kind",l:"Type",t:"sel",opts:["Income protection insurance","Election expenses","Other"]},{k:"amount",l:"Amount",t:"money",req:true}],
+    tax:{ded:"amount"} },
+  h01:{ shared:false, dateLabel:"Statement date", doc:"policy statement",
+    sub:"From the private health statement. Together with the income tests this decides the rebate tier and whether the Medicare levy surcharge applies. A couple on one policy: enter one line each with that person\'s share.",
+    fields:[{k:"party",l:"Insurer",t:"text",w:"w-txt",req:true},{k:"policy",l:"Policy no.",t:"text",w:"w-pc"},{k:"premiums",l:"Premiums paid",t:"money",req:true},{k:"rebate",l:"Rebate received",t:"money"},{k:"days",l:"Days covered",t:"num"},{k:"code",l:"Benefit code",t:"text",w:"w-pc"}],
+    tax:{phi:true} }
+};
+function monthsBetween(a,b){ var x=a.split("-"),y=b.split("-"); return (Number(y[0])-Number(x[0]))*12+(Number(y[1])-Number(x[1]))-(Number(y[2])<Number(x[2])?1:0); }
+function genEntries(id){
+  var out=[];
+  rowsIn(id).forEach(function(r){
+    people().forEach(function(o){ var sh=shareOf(r,o); if(sh>0) out.push({r:r,o:o,share:sh}); });
+  });
+  return out;
+}
+function genTotals(id){
+  var g = GEN[id], es = applies(id) ? genEntries(id) : [], t = {n:0, by:{}, rows:es};
+  OWNERS.forEach(function(o){ t.by[o]={}; });
+  var moneyKeys = g.fields.filter(function(f){return f.t==="money"||f.t==="num";}).map(function(f){return f.k;});
+  var calcKeys = (g.cols||[]).map(function(c){return c.k;});
+  moneyKeys.concat(calcKeys).forEach(function(k){ t[k]=0; OWNERS.forEach(function(o){ t.by[o][k]=0; }); });
+  t.net = 0; t.ok = 0; t.missing = 0;
+  var seen = {};
+  es.forEach(function(e){
+    var r=e.r, c = g.calc ? g.calc(r) : {};
+    if(!seen[r.id]){ seen[r.id]=1; t.n++; if(g.doc && !r.doc) t.missing++; }
+    var counts = !g.rowOk || g.rowOk(r);
+    if(counts) t.ok++;
+    moneyKeys.forEach(function(k){ var v=(Number(r[k])||0)*e.share; if(!(g.tax&&g.tax.onlyOk)||counts){ t[k]+=v; t.by[e.o][k]+=v; } });
+    calcKeys.forEach(function(k){ var v=(Number(c[k])||0)*e.share; t[k]+=v; t.by[e.o][k]+=v; });
+    if(g.net){ var v2=(Number(r[g.net.k])||0)*e.share; t.net += g.net.plus(r) ? v2 : -v2; }
+  });
+  if(g.total){ var ex = g.total(es); for(var k in ex) t[k]=ex[k]; }
+  return t;
+}
+function genMain(id){                       // the one number that goes to the nav and the return
+  var g=GEN[id], t=genTotals(id);
+  if(g.tax.cgt) return t[g.tax.cgt];
+  if(g.tax.rentNet) return t.net;
+  if(g.tax.ded) return t[g.tax.ded];
+  if(g.tax.phi) return t.premiums;
+  if(g.tax.income) return g.tax.income.reduce(function(a,k){return a+(t[k]||0);},0);
+  return 0;
+}
+function fmtCell(f, v, r){
+  if(f.t==="money") return money(v);
+  if(f.t==="num") return String(Number(v)||0);
+  if(f.t==="check") return v ? '<span class="chip chip--sm chip--accent">yes</span>' : '<span class="chip chip--sm chip--warning">no</span>';
+  if(f.t==="date") return fmtDate(v);
+  if(f.t==="sel") return '<span class="chip chip--sm chip--default">'+esc(v||"")+'</span>';
+  return esc(v||"");
+}
+function renderGeneric(sec){
+  var g = GEN[sec.id], t = genTotals(sec.id), es = t.rows, ppl = people();
+  var moneyF = g.fields.filter(function(f){return f.t==="money";});
+  var cols = g.cols||[];
+  var head = '<th class="table__column">'+esc(g.dateLabel||"Date")+'</th>'+g.fields.map(function(f){ return '<th'+(f.t==="money"||f.t==="num"?' class="r"':'')+'>'+esc(f.l)+'</th>'; }).join("")
+    + cols.map(function(c){return '<th class="table__column r">'+esc(c.l)+'</th>';}).join("")
+    + '<th class="table__column">Taxpayer</th>'+(g.doc?'<th class="table__column r">Evidence</th>':'')+'<th class="table__column"></th>';
+  var ncol = 2 + g.fields.length + cols.length + (g.doc?1:0) + 1;
+  var body = es.length ? es.map(function(e){
+    var r=e.r, c = g.calc ? g.calc(r) : {}, counts = !g.rowOk || g.rowOk(r);
+    return '<tr'+(counts?'':' style="opacity:.6"')+'><td class="table__cell num">'+fmtDate(r.date)+'</td>'
+      + g.fields.map(function(f){ var v = f.t==="money" ? (Number(r[f.k])||0)*e.share : r[f.k]; return '<td'+(f.t==="money"||f.t==="num"?' class="r num"':'')+'>'+(f.k==="party"?'<strong>':'')+fmtCell(f,v,r)+(f.k==="party"?'</strong>':'')+'</td>'; }).join("")
+      + cols.map(function(cc){ return '<td class="table__cell r num">'+money((Number(c[cc.k])||0)*e.share)+(cc.k==="net"&&c.held?' <span class="sharetag">50% discount</span>':'')+'</td>'; }).join("")
+      + '<td class="table__cell">'+whoCell(e)+'</td>'
+      + (g.doc?'<td class="table__cell r">'+(r.doc?'<span class="chip chip--sm chip--accent">'+esc(g.doc)+'</span>':'<span class="chip chip--sm chip--warning">none</span>')+'</td>':'')
+      + '<td class="table__cell r">'+rowActions(r)+'</td></tr>';
+  }).join("") : '<tr class="table__row"><td class="table__cell" colspan="'+ncol+'"><div class="empty">Nothing here yet. Add the first row below.</div></td></tr>';
+
+  function totLine(label, get, cls){
+    return '<tr'+(cls?' class="'+cls+'"':'')+'><td class="table__cell" colspan="2">'+label+'</td>'
+      + g.fields.slice(1).map(function(f){ return '<td class="table__cell r num">'+(f.t==="money"?money(get(f.k)):'')+'</td>'; }).join("")
+      + cols.map(function(cc){ return '<td class="table__cell r num">'+money(get(cc.k))+'</td>'; }).join("")
+      + '<td class="table__cell" colspan="'+(g.doc?3:2)+'"></td></tr>';
+  }
+  var tops = (ppl.length>1 ? ppl.map(function(o){ return totLine("Subtotal — "+esc(o), function(k){return t.by[o][k]||0;}); }).join("") : "")
+    + totLine(ppl.length>1 ? "Combined — reference only" : "Total — "+esc(ppl[0]), function(k){return t[k]||0;}, "total");
+  if(g.net) tops += '<tr class="table__row total"><td class="table__cell" colspan="2">'+(t.net>=0?'Net rental income':'Net rental loss')+'</td><td colspan="'+(ncol-2)+'" class="num" style="text-align:left">'+money(t.net)+'</td></tr>';
+  if(g.tax.cgt) tops += '<tr class="table__row total"><td class="table__cell" colspan="2">'+(t.net>=0?'Net capital gain':'Net capital loss — carried forward, not deducted')+'</td><td colspan="'+(ncol-2)+'" class="num" style="text-align:left">'+money(Math.abs(t.net))+'</td></tr>';
+  if(sec.id==="d01") tops += '<tr class="table__row total"><td class="table__cell" colspan="2">Claim — '+Math.round(t.capped)+' km'+(t.over?' (capped from '+Math.round(t.km)+')':'')+' at '+money(carRate())+'</td><td colspan="'+(ncol-2)+'" class="num" style="text-align:left">'+money(t.claim)+'</td></tr>';
+
+  var warn = "";
+  if(g.doc && t.missing) warn += '<div class="note"><strong>'+plural(t.missing,"row")+' without a '+esc(g.doc)+'.</strong></div>';
+  if(g.rowOk && t.ok<t.n) warn += '<div class="note"><strong>'+(t.n-t.ok)+' contribution'+(t.n-t.ok>1?'s':'')+' not yet claimable</strong> — '+esc(g.okText)+'.</div>';
+  if(sec.id==="d01" && t.over) warn += '<div class="note"><strong>Over the '+CAR_CAP_KM+' km cap.</strong> Beyond this the logbook method is the only option — one for your agent.</div>';
+  if(sec.id==="i18" && t.net<0) warn += '<div class="note acc"><strong>Net capital loss.</strong> It isn\'t deducted from income; it carries forward against future gains. Tell your agent the amount.</div>';
+
+  if(sec.id==="d12"){
+    warn = people().map(function(o){ var f=taxFigures(o);
+      return '<div class="'+(f.ccRoom<0?'note':'nextline')+'"><strong>'+esc(o)+'</strong> · concessional contributions '+money(f.concessional)+' of '+money(f.ccCap+f.ccCarry)+' ('+money(f.sg)+' SG, '+money(f.resc)+' salary sacrifice, '+money(f.superClaim)+' claimed here) · '+(f.ccRoom<0?'<strong>'+money(-f.ccRoom)+' over the cap</strong>':money(f.ccRoom)+' room left')+' <button class="linkbtn" data-go="tests">Details</button></div>';
+    }).join("") + warn;
+  }
+  return '<h2>'+esc(sec.name)+(sec.code?' <span class="sharetag">'+(/^D/.test(sec.code)?'':'item ')+esc(sec.code)+'</span>':'')+whoSuffix()+'</h2><p class="sub">'+g.sub+'</p>'+warn
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content"><thead class="table__header"><tr class="table__row">'+head+'</tr></thead>'
+    +'<tbody class="table__body tops">'+tops+'</tbody><tbody class="table__body">'+body+'</tbody></table></div>'
+    +genEntryHTML(sec)+'</div>';
+}
+function genEntryHTML(sec){
+  var g = GEN[sec.id], today = defaultEntryDate();
+  var inputs = g.fields.map(function(f){
+    var id = "g-"+f.k;
+    if(f.t==="text") return fld(esc(f.l),'<input class="input input--secondary '+(f.w||"w-txt")+'" id="'+id+'">');
+    if(f.t==="money") return fld(esc(f.l),'<input class="input input--secondary w-amt num" id="'+id+'" inputmode="decimal" placeholder="0.00">');
+    if(f.t==="num") return fld(esc(f.l),'<input class="input input--secondary w-hrs num" id="'+id+'" inputmode="decimal" placeholder="0">');
+    if(f.t==="date") return fld(esc(f.l),'<input type="date" class="input input--secondary w-date" id="'+id+'">');
+    if(f.t==="sel") return fld(esc(f.l),'<select class="input input--secondary input input--secondary" id="'+id+'">'+f.opts.map(function(o){return '<option>'+esc(o)+'</option>';}).join("")+'</select>');
+    if(f.t==="check") return fld("&nbsp;",'<label class="pill" style="cursor:pointer"><input type="checkbox" id="'+id+'" style="min-width:auto"> '+esc(f.l)+'</label>');
+    return "";
+  }).join("");
+  return '<div class="entry"><div class="row">'
+    +fld(esc(g.dateLabel||"Date"),'<input type="date" class="input input--secondary w-date" id="e-date" value="'+today+'">')
+    +inputs
+    +ownerSelect(!!g.shared)
+    +(g.doc?fld("&nbsp;",'<label class="pill" style="cursor:pointer"><input type="checkbox" id="e-doc" style="min-width:auto"> '+esc(g.doc)+'</label>'):'')
+    +'<button class="button button--primary" id="e-save">Add row</button>'
+
+    +'</div><div class="hint"><kbd class="kbd">Enter</kbd> saves and starts the next row.'+(g.rate?' '+money(g.rate.get())+' a kilometre for '+fyLabel()+'. <button class="linkbtn" data-go="setup">Change in Setup</button>':'')+'</div></div>';
+}
+function genCollect(sec, r, val, chk){
+  var g = GEN[sec.id], ok = true;
+  g.fields.forEach(function(f){
+    var id="g-"+f.k, v;
+    if(f.t==="money"||f.t==="num"){ v = parseFloat(val(id)); if(isNaN(v)) v = 0; if(f.req && !val(id)) ok=false; }
+    else if(f.t==="check") v = chk(id);
+    else { v = val(id); if(f.req && !v) ok=false; }
+    r[f.k]=v;
+  });
+  r.owner = val("e-owner") || OWNERS[0];
+  if(r.owner===SHARED){ r.share=parseFloat(val("e-share")); if(isNaN(r.share)) r.share=50; r.share=Math.max(0,Math.min(100,r.share)); }
+  if(g.doc) r.doc = chk("e-doc");
+  if(g.rate){ var rt=parseFloat(val("e-rate")); if(!isNaN(rt)&&rt!==g.rate.get()){ g.rate.set(rt); savePrefs(); } }
+  return ok;
+}
+// what each person's return looks like from every schedule
+function taxFigures(o){
+  return asPerson(o, function(){
+    var f = {o:o, income:0, withheld:0, offsets:0, rfb:0, resc:0, sg:0, superClaim:0, cgt:0, rentNet:0, otherDed:0, phi:null, superOk:0, superPending:0};
+    for(var id in GEN){
+      var g=GEN[id], t=genTotals(id);
+      if(g.tax.income) g.tax.income.forEach(function(k){ f.income += t[k]||0; });
+      if(g.tax.withheld) g.tax.withheld.forEach(function(k){ f.withheld += t[k]||0; });
+      if(g.tax.offsets) g.tax.offsets.forEach(function(k){ f.offsets += t[k]||0; });
+      if(g.tax.rfb) f.rfb += t.rfb||0;
+      if(g.tax.resc) f.resc += t.resc||0;
+      if(g.tax.cgt) f.cgt += t[g.tax.cgt]||0;
+      if(g.tax.rentNet) f.rentNet += t.net||0;
+      if(g.tax.ded) f.otherDed += t[g.tax.ded]||0;
+      if(g.tax.sg) f.sg += t.sg||0;
+      if(id==="d12") f.superClaim = t.amount||0;
+      if(g.tax.phi && t.n) f.phi = {premiums:t.premiums, rebate:t.rebate, days:t.days};
+      if(id==="d12"){ f.superOk = t.ok; f.superPending = t.n - t.ok; }
+    }
+    var d = deductionTotals(), w = wfhTotals(), b = businessTotals();
+    f.workDed = d.total + w.claim;
+    var bn = abnHolders().length ? b.sales - b.expenses : 0;
+    f.business = Math.max(0, bn); f.businessLoss = Math.max(0, -bn);   // a loss is deferred unless a non-commercial loss test is passed
+    f.cgtNet = Math.max(0, f.cgt);
+    f.rentIn = Math.max(0, f.rentNet);
+    f.assessable = f.income + f.business + f.cgtNet + f.rentIn;
+    f.deductions = f.workDed + f.otherDed;
+    f.taxable = Math.max(0, f.assessable - f.deductions);
+    f.investLoss = Math.max(0, -f.rentNet);              // net investment loss (rent only, for now)
+    f.testIncome = f.taxable + f.rfb + f.resc + f.investLoss;   // income for surcharge / rebate purposes
+    f.concessional = f.sg + f.resc + f.superClaim;
+    f.ccCap = rate("ccCap"); f.ccCarry = Number((state.prefs.misc||{})["ccCarry:"+state.fy+":"+o])||0;
+    f.ccRoom = f.ccCap + f.ccCarry - f.concessional;
+    var payg = 0; QUARTERS.forEach(function(q,i){ payg += Number(paygFor(i,o))||0; });
+    f.payg = payg;
+    return f;
+  });
+}
+function paygKey(i,o){ return state.fy+":"+o+":q"+(i+1); }
+function paygFor(i,o){ return (state.prefs.payg||{})[paygKey(i,o)]; }
+function renderTests(){
+  var thrSaved = (state.prefs.mlsFamilyBy||{})[state.fy], thr = thrSaved!=null ? Number(thrSaved) : rate("mls");
+  var F = OWNERS.map(function(o){ return {o:o, f:taxFigures(o)}; });
+  var fam = F.reduce(function(a,x){ return a+x.f.testIncome; },0);
+  function row(label, get, opts){
+    opts=opts||{};
+    if(opts.indent && !opts.keep && F.every(function(x){ var v=get(x.f); return !v; })) return '';   // nothing to show — keep the table short
+    return '<tr class="table__row'+(opts.total?' total':'')+'"><td class="table__cell'+(opts.indent?' ind':'')+'">'+label+'</td>'
+      +F.map(function(x){ var v=get(x.f); return '<td class="table__cell r num">'+(v==null?'—':(opts.text?v:money(v)))+'</td>'; }).join("")
+      +'<td class="table__cell r num fycol">'+(opts.noComb?'':(opts.text?'':money(F.reduce(function(a,x){return a+(get(x.f)||0);},0))))+'</td></tr>';
+  }
+  var t = '<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content hh"><thead class="table__header"><tr class="table__row"><th class="table__column">Estimate from the workpapers</th>'+OWNERS.map(function(o){return '<th class="table__column r">'+esc(o)+'</th>';}).join("")+'<th class="table__column r">Family</th></tr></thead><tbody class="table__body">'
+    + '<tr class="table__row grp"><td class="table__cell" colspan="4">Income &amp; deductions</td></tr>'
+    + row("Salary, interest, dividends, ESS, foreign", function(f){return f.income;}, {indent:true, keep:true})
+    + row("Net business income", function(f){return f.business;}, {indent:true})
+    + row("Business loss — deferred unless a non-commercial loss test is met", function(f){return f.businessLoss;}, {indent:true})
+    + row("Net capital gain", function(f){return f.cgtNet;}, {indent:true})
+    + row("Net rental income", function(f){return f.rentIn;}, {indent:true})
+    + row("<strong>Assessable income</strong>", function(f){return f.assessable;}, {total:true})
+    + row("Work-related deductions (incl. WFH)", function(f){return f.workDed;}, {indent:true})
+    + row("Other deductions (D1, D3, D7–8, D12, D15)", function(f){return f.otherDed;}, {indent:true})
+    + row("<strong>Taxable income</strong>", function(f){return f.taxable;}, {total:true})
+    + '<tr class="table__row grp"><td class="table__cell" colspan="4">Income tests — surcharge, rebate, spouse details</td></tr>'
+    + row("Reportable fringe benefits", function(f){return f.rfb;}, {indent:true})
+    + row("Reportable employer super", function(f){return f.resc;}, {indent:true})
+    + row("Net investment loss", function(f){return f.investLoss;}, {indent:true})
+    + row("<strong>Income for surcharge &amp; rebate tests</strong>", function(f){return f.testIncome;}, {total:true})
+    + '<tr class="table__row grp"><td class="table__cell" colspan="4">Already paid</td></tr>'
+    + row("Tax withheld (PAYG W, TFN)", function(f){return f.withheld;})
+    + row("PAYG instalments paid", function(f){return f.payg;})
+    + row("Offsets: franking credits, foreign tax", function(f){return f.offsets;})
+    + '<tr class="table__row grp"><td class="table__cell" colspan="4">Super</td></tr>'
+    + row("Employer super (SG)", function(f){return f.sg;}, {indent:true})
+    + row("Reportable employer super (salary sacrifice)", function(f){return f.resc;}, {indent:true})
+    + row("Personal super claimed (D12)", function(f){return f.superClaim;}, {indent:true})
+    + row("<strong>Concessional super contributions</strong>", function(f){return f.concessional;}, {total:true})
+    + row("Cap "+fyLabel()+" plus carried-forward room", function(f){return f.ccCap+f.ccCarry;}, {noComb:true})
+    + row("Room left", function(f){ return f.ccRoom<0 ? '<span class="chip chip--sm chip--danger">'+money(-f.ccRoom)+' over</span>' : money(f.ccRoom); }, {text:true, noComb:true})
+    + '<tr class="table__row grp"><td class="table__cell" colspan="4">Other</td></tr>'
+    + row("Private health — premiums / days", function(f){return f.phi?money(f.phi.premiums)+' · '+(f.phi.days||0)+' days':'none entered';}, {text:true, noComb:true})
+    + row("HELP / study loan balance", function(f){ var v=(state.prefs.misc||{})["help:"+f.o]; return v?money(v):"none"; }, {text:true, noComb:true})
+    + '</tbody></table></div></div>';
+  // HELP + threshold inputs (small settings, saved with prefs)
+  var help = '<div class="card card--default" style="padding:14px 18px"><h3 style="margin:0 0 8px;font-size:15px">Household settings</h3><div class="row" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">'
+    + OWNERS.map(function(o){ var k="help:"+o; return fld(esc(o)+"'s HELP balance",'<input class="input input--secondary w-amt num" data-pref="'+k+'" inputmode="decimal" value="'+((state.prefs.misc||{})[k]||"")+'" placeholder="0.00">'); }).join("")
+    + OWNERS.map(function(o){ var k="ccCarry:"+state.fy+":"+o; return fld(esc(o)+"'s carried-forward super cap <span class=\"sharetag\">from myGov</span>",'<input class="input input--secondary w-amt num" data-pref="'+k+'" inputmode="decimal" value="'+((state.prefs.misc||{})[k]||"")+'" placeholder="0.00">'); }).join("")
+    + fld("MLS family threshold "+fyLabel()+" <span class=\"sharetag\">"+(thrSaved!=null?"your override":"ATO figure")+"</span>",'<input class="input input--secondary w-amt num" data-pref="mlsFamily" inputmode="decimal" value="'+thr+'">')
+    + '</div><p class="hint">A HELP balance matters because repayment income includes business income and reportable super — the ATO adds a compulsory repayment on the assessment.</p></div>';
+  var mls = '<div class="note'+(fam>thr?'':' acc')+'"><strong>Family income for the Medicare levy surcharge: '+money(fam)+'</strong> against a threshold of '+money(thr)+'. '
+    +(fam>thr ? 'Above it — the surcharge applies to anyone in the family without appropriate hospital cover for the whole year.' : 'Below it — no surcharge this year on these figures.')
+    +' Both returns must show the other person\'s figures under Spouse details; every line above is per person for that reason.</div>';
+  var over = F.filter(function(x){ return x.f.ccRoom<0; });
+  var ccNote = over.length ? '<div class="note"><strong>Concessional super over the cap for '+esc(over.map(function(x){return x.o+" ("+money(-x.f.ccRoom)+")";}).join(", "))+'.</strong> The excess is taxed at your marginal rate with an interest charge. Before 30 June, reducing a personal contribution you plan to claim is the easy fix; carried-forward room shows in myGov. One for your agent.</div>' : '';
+  var nclNote = F.some(function(x){return x.f.businessLoss>0;}) ? '<div class="note"><strong>A business loss this year.</strong> It is shown as deferred: a sole trader can only offset a loss against other income if one of the non-commercial loss tests is met (for example $20,000 of business income). One for your agent.</div>' : '';
+  var ended = phase()==="prep" || phase()==="past";
+  return '<h2>Tax return — '+fyLabel()+'</h2><p class="sub">An estimate built from every schedule, the income tests and spouse details each return needs, and '+(ended?'lodging.':'lodging once the year ends.')+' Tax itself isn\'t calculated — that\'s the ATO\'s job.</p>'
+    + (ended ? prepCard(F.map(function(x){return {o:x.o};})) : '')
+    + mls + ccNote + nclNote + t
+    + '<p class="hint">HELP balances, carried-forward super cap and the surcharge threshold are set in <button class="linkbtn" data-go="setup">Setup</button>.</p>';
+}
+
+// ---------- rates page ----------
+function fmtRate(R, v){ return R.fmt==="cents" ? Math.round(v*100)+"c" : (R.fmt==="km" ? Number(v).toLocaleString("en-AU")+" km" : money(v)); }
+function carriedRates(){ return Object.keys(RATEBOOK).filter(function(k){ return rateStatus(k)==="carried"; }); }
+function ratesNote(){
+  var c = carriedRates(); if(!c.length) return "";
+  return '<div class="nextline">'+plural(c.length,"rate")+' for '+fyLabel()+' not yet published by the ATO — using last year\'s. <button class="linkbtn" data-go="rates">Rates &amp; thresholds</button></div>';
+}
+function renderRates(){
+  var fys = [state.fy-2, state.fy-1, state.fy];
+  var rows = Object.keys(RATEBOOK).map(function(k){
+    var R = RATEBOOK[k];
+    var cells = fys.map(function(fy){
+      var ry = rateYear(k, fy), st = rateStatus(k, fy);
+      var chip = st==="ok" ? '<span class="chip chip--sm chip--accent">checked</span>' : (st==="carried" ? '<span class="chip chip--sm chip--warning">not published — carried forward</span>' : '<span class="chip chip--sm chip--default">not re-checked</span>');
+      return '<td class="table__cell r'+(fy===state.fy?' curq':'')+'"><span class="num">'+fmtRate(R, ry.val)+'</span><br>'+chip+'</td>';
+    }).join("");
+    return '<tr class="table__row"><td class="table__cell"><strong>'+esc(R.l)+'</strong>'+(R.note?'<br><span class="sharetag">'+esc(R.note)+'</span>':'')+'<br><a class="linkbtn" style="font-size:12px" href="'+R.src+'" target="_blank" rel="noopener">ato.gov.au</a></td>'+cells+'</tr>';
+  }).join("");
+  var facts = FIXED_FACTS.map(function(f){
+    return '<tr class="table__row"><td class="table__cell" style="width:240px"><strong>'+esc(f[0])+'</strong></td><td class="table__cell">'+esc(f[1])+' <a class="linkbtn" style="font-size:12px" href="'+f[2]+'" target="_blank" rel="noopener">ato.gov.au</a></td></tr>';
+  }).join("");
+  var car = carriedRates();
+  return '<h2>Rates &amp; thresholds</h2><p class="sub">Every rate, threshold and date the workpapers rely on, by income year. Checked against ato.gov.au on '+CHECKED+'. Where the ATO hasn\'t published a figure for a year yet, the latest one is carried forward and flagged.</p>'
+    +(car.length?'<div class="note"><strong>'+plural(car.length,"figure")+' for '+fyLabel()+' not yet published by the ATO:</strong> '+car.map(function(k){return esc(RATEBOOK[k].l);}).join("; ")+'. The previous year\'s value is being used — check again before lodging.</div>':'')
+    +'<div class="table-root table-root--primary bas4wrap"><div class="table__scroll-container"><table class="table__content ratesTbl" style="min-width:760px"><thead class="table__header"><tr class="table__row"><th class="table__column"></th>'
+    +fys.map(function(fy){ return '<th class="table__column r'+(fy===state.fy?' curq':'')+'">'+fyLabel(fy)+'</th>'; }).join("")+'</tr></thead><tbody class="table__body">'+rows+'</tbody></table></div></div>'
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content hh"><thead class="table__header"><tr class="table__row"><th class="table__column">Rules and dates</th><th class="table__column"></th></tr></thead><tbody class="table__body">'+facts+'</tbody></table></div></div>'
+    +'<p class="hint">The working from home rate, the car rate and the surcharge threshold can be overridden on their own pages; an override applies to that year only.</p>';
+}
+
+// ---------- setup ----------
+function renderSetup(){
+  var groups = ["Income","Business","Deductions","Other"];
+  var sched = groups.map(function(g){
+    var xs = SECTIONS.filter(function(x){ return x.group===g && isDataSec(x) && !x.parent; });
+    return '<tr class="table__row"><td class="table__cell navlabel" colspan="3" style="padding-top:12px">'+g+'</td></tr>'+xs.map(function(x){
+      var a = appliesRec(x.id), n = state.rows.filter(function(r){ return r.section===x.id && rowFY(r)===state.fy; }).length, sg = suggestApplies(x.id);
+      var state_ = n ? '<span class="chip chip--sm chip--accent">'+plural(n,"row")+'</span>' : (a===true?'<span class="chip chip--sm chip--accent">applies</span>':(a===false?'<span class="chip chip--sm chip--default">not this year</span>':'<span class="chip chip--sm chip--warning">not confirmed'+(sg===true?' · applied last year':(sg===false?' · not last year':''))+'</span>'));
+      return '<tr class="table__row"><td class="table__cell">'+(x.code?'<span class="sharetag" style="display:inline-block;width:42px">'+esc(x.code)+'</span>':'<span style="display:inline-block;width:42px"></span>')+esc(x.name)+'</td><td class="table__cell">'+state_+'</td>'
+        +'<td class="table__cell r" style="white-space:nowrap">'+(n?'':'<div class="tabs__list-container seg2"><div class="tabs__list"><button class="tabs__tab" data-applies="'+x.id+'" data-val="1" data-selected="'+(a===true)+'">Applies</button><button class="tabs__tab" data-applies="'+x.id+'" data-val="0" data-selected="'+(a===false)+'">Not this year</button></div></div>')+'</td></tr>';
+    }).join("");
+  }).join("");
+  var u = unconfirmed();
+  var schedCard = '<section class="setup"><h3>Schedules in '+fyLabel()+'</h3><p class="sub">Only schedules that apply appear in the sidebar. A schedule with rows always applies.</p>'
+    +(u.length?'<div class="nextline">'+plural(u.length,"schedule")+' not confirmed. <button class="button button--primary button--sm" data-applies="*" data-val="s">'+(u.some(function(x){return suggestApplies(x.id)!==null;})?'Accept last year\'s pattern':'Mark all as applying')+'</button></div>':'')
+    +'<div class="table-root table-root--primary"><div class="table__scroll-container"><table class="table__content hh" style="min-width:520px"><tbody class="table__body">'+sched+'</tbody></table></div></div></section>';
+
+  var holders = people().filter(isAbnHolder);
+  var opts = [["","Not assessed yet"],["notpsi","Not PSI"],["psb","PSI — personal services business"],["applies","PSI rules apply"]];
+  var abn = '<section class="setup"><h3>ABN</h3>'
+    +(holders.length ? '<p class="sub">These change how business rows count. Match what the ATO has on record; check PSI with your agent.</p><div class="setupgrid">'+holders.map(function(o){
+        var t = rollingTurnover(o), pct = Math.min(100, t/rate("gstReg")*100);
+        return '<div class="card card--default" style="padding:14px 16px"><h3 style="margin:0 0 10px">'+esc(o)+'</h3>'
+          + fld("GST",'<select class="input input--secondary" data-gstreg="'+esc(o)+'"><option value="1"'+(gstRegistered(o)?' selected':'')+'>Registered</option><option value="0"'+(!gstRegistered(o)?' selected':'')+'>Not registered</option></select>')
+          + (gstRegistered(o) ? fld("GST accounting",'<select class="input input--secondary" data-basis="'+esc(o)+'"><option value="cash"'+(basisOf(o)==="cash"?' selected':'')+'>Cash — by date paid</option><option value="accrual"'+(basisOf(o)!=="cash"?' selected':'')+'>Accrual — by invoice date</option></select>')
+              : '<div class="meter meter--sm '+(pct>=90?'meter--warning':'meter--accent')+'"><div class="meter__track"><div class="meter__fill" style="width:'+pct.toFixed(1)+'%"></div></div></div><div class="sharetag" style="margin:4px 0 8px">GST turnover '+money(t)+' of '+money(rate("gstReg"))+'</div>')
+          + fld("Income counts",'<select class="input input--secondary" data-incbasis="'+esc(o)+'"><option value="receipts"'+(incomeBasisOf(o)==="receipts"?' selected':'')+'>When received</option><option value="earnings"'+(incomeBasisOf(o)!=="receipts"?' selected':'')+'>When invoiced</option></select>')
+          + fld("Personal services income",'<select class="input input--secondary" data-psi="'+esc(o)+'">'+opts.map(function(x){ return '<option value="'+x[0]+'"'+(psiOf(o)===x[0]?' selected':'')+'>'+esc(x[1])+'</option>'; }).join("")+'</select>')
+          + '</div>';
+      }).join("")+'</div><p class="hint">PSI: income mainly for your own skills or effort. Unless the results test, or the 80% rule plus another test, is passed, home occupancy and payments to associates aren\'t deductible. <a class="linkbtn" href="https://www.ato.gov.au/businesses-and-organisations/income-deductions-and-concessions/personal-services-income/working-out-if-the-psi-rules-apply" target="_blank" rel="noopener">ATO guide</a></p>'
+      : '<p class="sub">No business rows in '+fyLabel()+'. Settings appear here once there is one.</p>')+'</section>';
+
+  var thrSaved = (state.prefs.mlsFamilyBy||{})[state.fy], thr = thrSaved!=null ? Number(thrSaved) : rate("mls");
+  function money_in(k, label){ return fld(label,'<input class="input input--secondary w-amt num" data-pref="'+k+'" inputmode="decimal" value="'+((state.prefs.misc||{})[k]||"")+'" placeholder="0.00">'); }
+  var house = '<section class="setup"><h3>Household</h3><p class="sub">Figures only you know. Everything else is derived from the schedules.</p><div class="setupgrid">'
+    + OWNERS.map(function(o){ return '<div class="card card--default" style="padding:14px 16px"><h3 style="margin:0 0 10px">'+esc(o)+'</h3>'+money_in("help:"+o,"HELP / study loan balance")+'<div style="height:8px"></div>'+money_in("ccCarry:"+state.fy+":"+o,"Carried-forward super cap <span class=\"sharetag\">from myGov</span>")+'</div>'; }).join("")
+    + '</div></section>';
+
+  function rateIn(key, label, cur, ato){
+    return fld(label+' <span class="sharetag">ATO '+fmtRate(RATEBOOK[key], ato)+(rateStatus(key)==="carried"?' — carried forward':'')+'</span>','<input class="input input--secondary w-hrs num" data-rate="'+key+'" inputmode="decimal" value="'+(cur!==ato?cur:"")+'" placeholder="'+ato+'">');
+  }
+  var rates = '<section class="setup"><h3>Rates for '+fyLabel()+'</h3><p class="sub">Leave blank to use the ATO figure. An override applies to this year only.</p><div class="row" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">'
+    + rateIn("wfh","Working from home $/hr", wfhRate(), rate("wfh"))
+    + rateIn("car","Car $/km", carRate(), rate("car"))
+    + fld("MLS family threshold <span class=\"sharetag\">ATO "+money(rate("mls"))+"</span>",'<input class="input input--secondary w-amt num" data-pref="mlsFamily" inputmode="decimal" value="'+(thrSaved!=null?thrSaved:"")+'" placeholder="'+rate("mls")+'">')
+    + '</div><p class="hint"><button class="linkbtn" data-go="rates">Every rate, threshold and due date, with ATO sources</button></p></section>';
+
+  var how = '<section class="setup"><h3>How the household works</h3><div class="card card--default" style="padding:12px 16px"><table class="table__content hh" style="min-width:0"><tbody class="table__body">'
+    +'<tr class="table__row"><td class="table__cell" style="width:170px"><strong>Shared rows</strong></td><td class="table__cell">Entered once with a split; each person sees and claims only their share.</td></tr>'
+    +'<tr class="table__row"><td class="table__cell"><strong>Combined figures</strong></td><td class="table__cell">Reference only — each return claims its own column.</td></tr>'
+    +'<tr class="table__row"><td class="table__cell"><strong>Business &amp; BAS</strong></td><td class="table__cell">Belong to whoever holds the ABN; never combined or split.</td></tr>'
+    +'</tbody></table></div></section>';
+
+  return '<h2>Setup — '+fyLabel()+'</h2><p class="sub">Settings for this year, in one place. Change the year in the sidebar.</p>'
+    + schedCard + abn + house + rates + how + PROTO_NOTE;
+}
+
+// ---------- shell ----------
+function syncNavToggle(){
+  var nt = el("navtoggle"); if(!nt) return;
+  var sec = secById(state.view); el("navcur").textContent = sec ? sec.name : "Sections";
+  nt.setAttribute("aria-expanded", String(document.body.classList.contains("nav-open")));
+}
+function navVisible(x){
+  // a schedule earns a place in the sidebar once it has rows, or you've said it applies this year
+  var top = x.parent ? secById(x.parent) : x;
+  if(!isDataSec(top)) return true;
+  if(!applies(top.id)) return false;
+  if(x.parent){ if(x.id==="s07b") return deductionTotals().depr.length>0 || state.view===x.id; return hasRows(x.id) || state.view===x.id || navVisible(top); }
+  var kids = SECTIONS.filter(function(k){ return k.parent===x.id; });
+  return hasRows(x.id) || kids.some(function(k){ return hasRows(k.id) || state.view===k.id; }) || appliesRec(x.id)===true || state.view===x.id;
+}
+function renderNav(){
+  var html = '', lastGroup = null, more = [];
+  function item(x, muted){
+    var tot = sectionTotal(x.id);
+    return '<button class="navitem'+(x.parent?' sub':'')+'" data-go="'+x.id+'" aria-current="'+(state.view===x.id)+'"'+(muted?' style="opacity:.6"':'')+'>'
+      +'<span class="nm">'+esc(x.name)+'</span>'+(tot!=null&&!muted?'<span class="amt num">'+money(tot)+'</span>':'')+'</button>';
+  }
+  SECTIONS.forEach(function(x){
+    if(x.hidden) return;
+    if(x.id==="bas" && !basHolders().length && state.view!=="bas") return;
+    var top = x.parent ? secById(x.parent) : x;
+    if(isDataSec(top) && applies(top.id) && !navVisible(x)){ if(!x.parent) more.push(x); return; }
+    if(!navVisible(x)) return;
+    if(x.group!==lastGroup){
+      if(lastGroup==="Other" || (x.group==="Tools" && lastGroup!=="Other")) html += moreBlock();
+      html += x.group ? '<div class="navlabel" style="margin-top:10px">'+esc(x.group)+'</div>' : '';
+      lastGroup = x.group;
+    }
+    html += item(x);
+  });
+  function moreBlock(){
+    if(!more.length) return "";
+    var out = '<button class="navitem navmore" data-navmore="1">'+(state.navMore?'− Hide':'+ '+more.length+' more')+' schedule'+(more.length===1?'':'s')+'</button>';
+    if(state.navMore) out += more.map(function(x){ return item(x, true); }).join("");
+    return out;
+  }
+  el("nav").innerHTML = html;
+}
+
+function renderWho(){
+  el("who").innerHTML = [HOUSEHOLD].concat(OWNERS).map(function(o){
+    return '<button class="tabs__tab" data-who="'+esc(o)+'" data-selected="'+(state.person===o)+'" aria-pressed="'+(state.person===o)+'">'+esc(o)+'</button>';
+  }).join("");
+}
+function renderFY(){
+  var counts={}; state.rows.forEach(function(r){ var f=rowFY(r); counts[f]=(counts[f]||0)+1; });
+  el("fy").innerHTML = fyList().map(function(f){
+    return '<option value="'+f+'"'+(f===state.fy?' selected':'')+'>'+fyLabel(f)+(f===currentFY()?' · current':(counts[f]?'':' · empty'))+'</option>';
+  }).join("");
+}
+function render(){
+  syncNavToggle();
+  renderFY();
+  renderWho();
+  renderNav();
+  var v = state.view, html;
+  if(v==="summary") html = renderSummary();
+  else if(v==="s05") html = renderBusiness();
+  else if(v==="s07") html = renderDeductions();
+  else if(v==="s07a") html = renderWFH();
+  else if(v==="s07b") html = renderDepr();
+  else if(v==="bas") html = renderBAS();
+  else if(v==="hist") html = renderHistory();
+  else if(v==="tests") html = renderTests();
+  else if(v==="rates") html = renderRates();
+  else if(v==="setup") html = renderSetup();
+  else if(GEN[v]) html = renderGeneric(secById(v));
+  else html = renderNotes();
+  var banner = "";
+  if(state.flash){ banner += '<div class="note acc">'+esc(state.flash)+'</div>'; }
+  var vsec = secById(v); if(vsec) banner += naBanner(vsec);
+  if(v!=="summary") banner += returnNotes();
+  if(v!=="summary" && vsec && vsec.kind!=="derived" && vsec.kind!=="note"){
+    var lockedP = people().filter(function(o){ return returnLocked(o); });
+    if(lockedP.length) banner += '<div class="nextline"><strong>'+esc(lockedP.join(" and "))+'\'s '+fyLabel()+' return'+(lockedP.length>1?'s are':' is')+' lodged and locked</strong> — '+(lockedP.length===people().length?'rows here are read-only':'rows for '+esc(lockedP.join(" and "))+', and shared rows, are read-only')+'. <button class="linkbtn" data-go="summary">Reopen from the Summary</button></div>';
+  }
+  if(isPastFY() && v!=="hist") banner += '<div class="note acc"><strong>You\'re looking at '+fyLabel()+', a past year.</strong> '+(people().every(function(o){return returnLocked(o);}) ? 'The return'+(people().length>1?'s are':' is')+' lodged, so this year is read-only.' : 'Rows can still be added or corrected here so earlier years can be backfilled.')+' <button class="button button--tertiary button--sm" data-fy="'+currentFY()+'">Back to '+fyLabel(currentFY())+'</button></div>';
+  el("main").innerHTML = banner + html;
+
+  var sec = SECTIONS.filter(function(s){return s.id===v;})[0];
+  if(sec) wireEntry(sec);
+  if(v==="hist") wireHistory();
+}
+
+function keepPanel(){
+  var keep = {}; ["u-reason","u-type"].forEach(function(id){ var e=el(id); if(e) keep[id]=e.value; });
+  var ak = el("u-ack") ? el("u-ack").checked : false;
+  render();
+  for(var id in keep){ if(el(id)) el(id).value = keep[id]; }
+  if(el("u-ack")) el("u-ack").checked = ak;
+}
+function rowById(id){ return state.rows.filter(function(r){return r.id===id;})[0]; }
+document.addEventListener("change", function(e){
+  var t = e.target;
+  if(t.getAttribute && t.getAttribute("data-pref")){
+    var pk = t.getAttribute("data-pref"), pv = parseFloat(t.value);
+    if(pk==="mlsFamily"){ state.prefs.mlsFamilyBy = Object.assign({}, state.prefs.mlsFamilyBy||{}); if(isNaN(pv)) delete state.prefs.mlsFamilyBy[state.fy]; else state.prefs.mlsFamilyBy[state.fy]=pv; }
+    else { state.prefs.misc = Object.assign({}, state.prefs.misc||{}); state.prefs.misc[pk] = isNaN(pv)?"":pv; }
+    savePrefs(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-psi")!=null){
+    state.prefs.psi = Object.assign({}, state.prefs.psi||{}); state.prefs.psi[psiKey(t.getAttribute("data-psi"))] = t.value; savePrefs(); render(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-rate")!=null){
+    var rk = t.getAttribute("data-rate"), rv = parseFloat(t.value), bag = rk==="wfh" ? "wfhRates" : "carRates";
+    state.prefs[bag] = Object.assign({}, state.prefs[bag]||{});
+    if(isNaN(rv)) delete state.prefs[bag][state.fy]; else state.prefs[bag][state.fy] = rv;
+    savePrefs(); render(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-gstreg")!=null){
+    state.prefs.gstReg = Object.assign({}, state.prefs.gstReg||{}); state.prefs.gstReg[t.getAttribute("data-gstreg")] = t.value==="1"; savePrefs(); render(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-incbasis")!=null){
+    state.prefs.incomeBy = Object.assign({}, state.prefs.incomeBy||{}); state.prefs.incomeBy[t.getAttribute("data-incbasis")] = t.value; savePrefs(); render(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-basis")!=null){
+    state.prefs.basisBy = Object.assign({}, state.prefs.basisBy||{}); state.prefs.basisBy[t.getAttribute("data-basis")] = t.value; savePrefs(); render(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-payg")){
+    var pq = t.getAttribute("data-payg").split("|"), pvv = parseFloat(t.value);
+    state.prefs.payg = Object.assign({}, state.prefs.payg||{});
+    state.prefs.payg[paygKey(Number(pq[0]), pq[1])] = isNaN(pvv)?0:pvv; savePrefs(); render(); return;
+  }
+  if(t.getAttribute && t.getAttribute("data-check")){
+    state.prefs.checks = Object.assign({}, state.prefs.checks||{});
+    state.prefs.checks[t.getAttribute("data-check")] = t.checked; savePrefs(); return;
+  }
+ if(!t.getAttribute || !t.getAttribute("data-edit")) return;
+  var r = rowById(t.getAttribute("data-id")); if(!r) return;
+  if(rowLocked(r)){ render(); return; }
+  var f = t.getAttribute("data-edit"), v = parseFloat(t.value);
+  if(f==="amount"){ if(isNaN(v)) { render(); return; } r.amount = v; }
+  else if(f==="gst"){ if(t.value.trim()===""||isNaN(v)){ r.gst=0; r.noGst=true; } else { r.gst=v; r.noGst=false; } }
+  else if(f==="apportion"){ r.apportion = isNaN(v) ? 100 : Math.max(0, Math.min(100, v)); }
+  else if(f==="paid"){
+    var L = lockOfDate(t.value, ownerOf(r));
+    if(L){ state.flash = "That payment date falls in "+ownerOf(r)+"'s "+fyLabel(L.fy)+" Q"+(L.i+1)+", which is lodged and locked. Reopen it on the BAS page first."; render(); return; }
+    var before = rowFY(r);
+    r.paid = t.value || "";
+    if(rowFY(r)!==before){ state.flash = r.party+" now counts in "+fyLabel(rowFY(r))+" — income is counted in the year it is received."; }
+  }
+  persist(r); render();
+});
+document.addEventListener("keydown", function(e){
+  if(e.key==="Enter" && e.target.getAttribute && e.target.getAttribute("data-edit")){ e.preventDefault(); e.target.blur(); }
+});
+document.addEventListener("click", function(e){
+  var c = e.target.closest ? e.target : null;
+  state.flash = "";
+  var ab = c && c.closest("[data-applies]");
+  if(ab){ e.preventDefault(); var dc0 = document.querySelector("[data-confirm]"); state.openConfirm = !!(dc0 && dc0.open && ab.getAttribute("data-applies")!=="*");
+    var aid = ab.getAttribute("data-applies"), av = ab.getAttribute("data-val");
+    if(aid==="*"){ unconfirmed().forEach(function(x){ setApplies(x.id, suggestApplies(x.id)!==false); }); }
+    else setApplies(aid, av==="1");
+    render(); return;
+  }
+  var rq = c && c.closest("[data-rui]");
+  if(rq){ state.rui = {mode:rq.getAttribute("data-rui"), o:rq.getAttribute("data-o")}; state.rerr=""; render(); var pn=document.querySelector(".panel .panel"); if(pn&&pn.scrollIntoView) pn.scrollIntoView({block:"nearest"}); return; }
+  if(c && c.closest("[data-rui-cancel]")){ state.rui=null; state.rerr=""; render(); return; }
+  if(c && c.closest("[data-rui-go]") && state.rui){
+    var ru = state.rui, rack = el("r-ack"), rwhy = el("r-reason"), rtyp = el("r-type");
+    function keepR(msg){ var k={why:rwhy&&rwhy.value, typ:rtyp&&rtyp.value, ack:rack&&rack.checked}; state.rerr=msg; render(); if(el("r-reason")) el("r-reason").value=k.why||""; if(el("r-type")) el("r-type").value=k.typ||""; if(el("r-ack")) el("r-ack").checked=!!k.ack; }
+    if(rack && !rack.checked) return keepR("Tick the confirmation to continue.");
+    if(ru.mode==="reopen"){
+      if(!rwhy.value.trim()) return keepR("Give a reason — it goes in the history.");
+      if(rtyp.value.trim().toUpperCase()!=="AMEND") return keepR("Type AMEND to confirm.");
+      setReturn(ru.o, "reopened", "Reopened", rwhy.value.trim());
+    } else if(ru.mode==="lodge") setReturn(ru.o, "lodged", "Marked lodged and locked", "");
+    else { var rv = retVariance(ru.o); if(rv && rv.any) setReturn(ru.o, "lodged", "Re-locked with amended figures", ""); else { var keep = retRec(ru.o); setReturn(ru.o, "lodged", "Re-locked, no change", ""); state.prefs.returns[returnKey(ru.o)].figures = keep.figures; savePrefs(); } }
+    state.rui=null; state.rerr=""; render(); return;
+  }
+  var rb = c && c.closest("[data-return]");
+  if(rb){
+    state.prefs.returns = Object.assign({}, state.prefs.returns||{});
+    var rk = state.fy+":"+rb.getAttribute("data-return");
+    if(rb.getAttribute("data-val")==="1") state.prefs.returns[rk] = {day:todayISO()}; else delete state.prefs.returns[rk];
+    savePrefs(); render(); return;
+  }
+  var ebtn = c && c.closest("[data-editrow]");
+  if(ebtn){ state.editing = ebtn.getAttribute("data-editrow"); render(); return; }
+  if(c && c.closest("[data-cancel-edit]")){ state.editing = null; render(); return; }
+  if(c && c.closest("[data-navmore]")){ state.navMore = !state.navMore; renderNav(); return; }
+  var nt2 = c && c.closest("#navtoggle");
+  if(nt2){ document.body.classList.toggle("nav-open"); syncNavToggle(); return; }
+  var fb = c && c.closest("[data-fy]");
+  if(fb){ setFY(Number(fb.getAttribute("data-fy"))); state.ui=null; if(fb.getAttribute("data-view")) state.view=fb.getAttribute("data-view"); render(); window.scrollTo(0,0); return; }
+  var wb = c && c.closest("[data-who]");
+  if(wb){ state.person = wb.getAttribute("data-who"); state.ui=null; state.err="";
+    try{ localStorage.setItem("wp-person", state.person); }catch(x){}
+    render(); return; }
+  var ub = c && c.closest("[data-ui]");
+  if(ub){ state.ui = {mode:ub.getAttribute("data-ui"), q:Number(ub.getAttribute("data-q")), o:ub.getAttribute("data-o")}; state.err=""; render();
+    var pn=document.querySelector(".panel"); if(pn&&pn.scrollIntoView) pn.scrollIntoView({block:"nearest"}); return; }
+  if(c && c.closest("[data-ui-cancel]")){ state.ui=null; state.err=""; render(); return; }
+  if(c && c.closest("[data-ui-go]") && state.ui){
+    var u = state.ui, ack = el("u-ack"), why = el("u-reason"), typed = el("u-type");
+    BO = u.o;
+    if(ack && !ack.checked){ state.err="Tick the confirmation to continue."; BO=null; keepPanel(); return; }
+    if(u.mode==="reopen"){
+      if(!why.value.trim()){ state.err="Give a reason — it goes in the quarter's history."; BO=null; keepPanel(); return; }
+      if(typed.value.trim().toUpperCase()!=="Q"+(u.q+1)){ state.err="Type Q"+(u.q+1)+" to confirm."; BO=null; keepPanel(); return; }
+      setLodge(u.q,"reopened","Reopened",why.value.trim());
+    } else if(u.mode==="lodge"){ setLodge(u.q,"lodged","Lodged and locked","");
+    } else { var vv=variance(u.q); setLodge(u.q,"lodged", vv&&vv.any?"Re-locked with revised figures":"Re-locked, no change",""); }
+    BO = null; state.ui=null; state.err=""; render(); return;
+  }
+  var dc = e.target.closest ? e.target.closest("[data-doc]") : null;
+  if(dc){ var dr = rowById(dc.getAttribute("data-doc")); if(dr && !rowLocked(dr)){ dr.doc = !dr.doc; persist(dr); render(); } return; }
+  var go = e.target.closest ? e.target.closest("[data-go]") : null;
+  if(go){ document.body.classList.remove("nav-open"); state.editing=null; state.rui=null; state.ui=null; state.err=""; state.view = go.getAttribute("data-go"); render(); return; }
+  var del = e.target.closest ? e.target.closest("[data-del]") : null;
+  if(del){ remove(del.getAttribute("data-del")); return; }
+});
+
+function paintTheme(){
+  var cur = document.documentElement.getAttribute("data-theme") || "auto";
+  Array.prototype.forEach.call(document.querySelectorAll("[data-theme-set]"), function(b){ var on=b.getAttribute("data-theme-set")===cur; b.setAttribute("aria-pressed", String(on)); b.setAttribute("data-selected", String(on)); });
+  var auto = !document.documentElement.getAttribute("data-theme");
+  document.documentElement.classList.toggle("dark", auto ? window.matchMedia("(prefers-color-scheme: dark)").matches : cur==="dark");
+}
+el("theme").addEventListener("click", function(e){
+  var b = e.target.closest("[data-theme-set]"); if(!b) return;
+  var v = b.getAttribute("data-theme-set");
+  if(v==="auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", v);
+  try{ localStorage.setItem("wp-theme", v); }catch(x){}
+  paintTheme();
+});
+try{ var st = localStorage.getItem("wp-theme"); if(st==="light"||st==="dark") document.documentElement.setAttribute("data-theme", st); }catch(x){}
+paintTheme();
+
+
+function setStore(txt, live){
+  el("storetxt").textContent = txt;
+  el("store").className = "chip chip--sm "+(live?"chip--success":"chip--default");
+}
+
+try{ var sp = localStorage.getItem("wp-person"); if(sp && [HOUSEHOLD].concat(OWNERS).indexOf(sp)>-1) state.person = sp; }catch(x){}
+el("fy").addEventListener("change", function(){ setFY(Number(this.value)); state.ui=null; state.err=""; render(); });
+setFY(currentFY());
+// first paint immediately, without waiting on anything
+render();
+setStore("connecting…", false);
+
+(async function(){
+  var db = null;
+  try { db = await (window.claude && window.claude.use ? window.claude.use("db") : Promise.resolve(null)); }
+  catch(e){ db = null; }
+
+  if(!db){
+    setStore("this session only", false);
+    return;
+  }
+  state.db = db;
+  state.live = true;
+  setStore("saved & shared", true);
+
+  try{
+    db.collection("rows").onSnapshot(function(snap){
+      var docs = snap && snap.docs ? snap.docs : (Array.isArray(snap) ? snap : []);
+      state.rows = docs.map(function(d){
+        var data = d.data ? d.data() : d;
+        var id = d.id || data.id;
+        return Object.assign({}, data, {id:id.indexOf("/")>-1 ? id.split("/").pop() : id});
+      });
+      render();
+    });
+  }catch(e){ setStore("read failed", false); }
+
+  try{
+    var p = await db.doc("settings/prefs").get();
+    var data = p && (p.data ? p.data() : p);
+    if(data && data.wfhRate!=null){ state.prefs = Object.assign(state.prefs, data); render(); }
+  }catch(e){}
+})();
+
+})();
+</script>
+</body>
+</html>

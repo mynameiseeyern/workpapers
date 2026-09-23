@@ -1,6 +1,6 @@
 import { APP_VERSION } from "../version";
-import { Button, Label, ListBox, Select, Separator, Tabs } from "@heroui/react";
-import { fyLabel } from "@workpapers/core";
+import { Alert, Button, Label, ListBox, Select, Separator, Tabs } from "@heroui/react";
+import { formatMoney, fyLabel } from "@workpapers/core";
 import { useState, type ReactNode } from "react";
 import { SECTIONS, type Group } from "../data/sections";
 import { pb } from "../data/pb";
@@ -9,6 +9,7 @@ interface Props {
   view: string; fy: number; person: string; years: number[]; people: string[];
   onNavigate: (view: string) => void; onYear: (fy: number) => void; onPerson: (p: string) => void;
   onSignOut: () => void; children: ReactNode;
+  example: boolean; onExample: (on: boolean) => void; totals: Record<string, number | null>;
 }
 const GROUPS: Group[] = ["", "Income", "Business", "Deductions", "Other", "Tools"];
 
@@ -34,7 +35,7 @@ export function AppShell(p: Props) {
       </header>
 
       <div className="flex flex-1 flex-col md:flex-row">
-        <nav className="flex w-full shrink-0 flex-col border-b border-separator bg-surface p-3 md:sticky md:top-[53px] md:h-[calc(100vh-53px)] md:w-60 md:border-r md:border-b-0" aria-label="Sections">
+        <nav className="flex w-full shrink-0 flex-col border-b border-separator bg-surface p-3 md:sticky md:top-[53px] md:h-[calc(100vh-53px)] md:w-60 md:overflow-y-auto md:border-r md:border-b-0" aria-label="Sections">
           <Select value={p.fy} onChange={(v) => v != null && p.onYear(Number(v))} className="w-full">
             <Label>Financial year</Label>
             <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
@@ -46,6 +47,10 @@ export function AppShell(p: Props) {
               </ListBox>
             </Select.Popover>
           </Select>
+
+          <Button className="mt-2" variant={p.example ? "primary" : "tertiary"} size="sm" fullWidth onPress={() => p.onExample(!p.example)}>
+            {p.example ? "Back to our records" : "Show the example year"}
+          </Button>
 
           <Button className="mt-2 md:hidden" variant="secondary" size="sm" fullWidth onPress={() => setNavOpen((o) => !o)} aria-expanded={navOpen}>
             {current?.name ?? "Sections"} ▾
@@ -61,7 +66,8 @@ export function AppShell(p: Props) {
                   {items.map((s) => (
                     <button key={s.id} type="button" onClick={() => go(s.id)} aria-current={p.view === s.id ? "page" : undefined}
                       className={`flex w-full items-center rounded-2xl px-2.5 py-1.5 text-left text-sm ${s.parent ? "pl-7 text-[13px]" : ""} ${p.view === s.id ? "bg-accent-soft font-semibold text-accent-soft-foreground" : "hover:bg-surface-secondary"}`}>
-                      {s.name}
+                      <span className="flex-1">{s.name}</span>
+                      {p.totals[s.id] != null && <span className="ml-2 text-xs tabular-nums text-muted">{formatMoney(p.totals[s.id]!).replace(/\.\d\d$/, "")}</span>}
                     </button>
                   ))}
                 </div>
@@ -76,7 +82,18 @@ export function AppShell(p: Props) {
           </div>
         </nav>
 
-        <main className="min-w-0 flex-1 px-4 pt-5 pb-20 md:px-6">{p.children}</main>
+        <main className="min-w-0 flex-1 px-4 pt-5 pb-20 md:px-6">
+          {p.example && (
+            <Alert status="accent" className="mb-4 max-w-4xl">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>Example year</Alert.Title>
+                <Alert.Description>Made-up figures for two people, showing how records flow into the BAS and the tax return. Nothing here is saved or mixed with your records.</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
+          {p.children}
+        </main>
       </div>
     </div>
   );

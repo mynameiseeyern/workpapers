@@ -1,0 +1,8 @@
+{
+  "name": "@workpapers/oracle",
+  "private": true,
+  "type": "module",
+  "description": "Runs the frozen prototype (v15) headless as a rules oracle to generate golden fixtures. Never sees real data.",
+  "scripts": { "golden": "tsx generate.ts" },
+  "devDependencies": { "jsdom": "30.1.1", "tsx": "4.21.0", "@workpapers/core": "workspace:*" }
+}
