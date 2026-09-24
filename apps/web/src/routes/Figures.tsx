@@ -15,9 +15,20 @@ function Line({ label, value, strong, indent, hint }: { label: string; value: nu
   );
 }
 
-/** One person's return estimate: how the schedules add up to taxable income. */
+/** A category subtotal under a return line. */
+function Sub({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-0.5 pl-8 text-xs text-muted">
+      <span>{label}</span>
+      <span className="tabular-nums">{m(value)}</span>
+    </div>
+  );
+}
+const secLabel = (id: string) => { const s = sectionById(id); return s ? `${s.name}${s.code ? ` (${s.code})` : ""}` : id; };
+
+/** One person's return estimate: how the schedules add up to taxable income, with subtotals by category. */
 export function ReturnCard({ e, o }: { e: Engine; o: string }) {
-  const f = e.taxFigures(o);
+  const f = e.taxFigures(o), b = e.taxBreakdown(o), bt = e.businessTotals([o]);
   return (
     <Card>
       <Card.Header>
@@ -26,12 +37,19 @@ export function ReturnCard({ e, o }: { e: Engine; o: string }) {
       </Card.Header>
       <Card.Content>
         <Line label="Salary, interest, dividends and other income" value={f.income} indent />
-        {f.business > 0 && <Line label="Business income (net)" value={f.business} indent />}
+        {b.income.map((x) => <Sub key={x.id} label={secLabel(x.id)} value={x.cents} />)}
+        {f.business > 0 && <>
+          <Line label="Business income (net)" value={f.business} indent />
+          <Sub label="Sales, excluding GST" value={bt.sales} />
+          <Sub label="Less business expenses" value={-bt.expenses} />
+        </>}
         {f.cgtNet > 0 && <Line label="Net capital gain" value={f.cgtNet} indent />}
         {f.rentIn > 0 && <Line label="Net rent" value={f.rentIn} indent />}
         <Line label="Assessable income" value={f.assessable} strong />
         <Line label="Work-related deductions (incl. WFH)" value={f.workDed} indent />
+        {b.work.map((x) => <Sub key={x.category} label={x.category} value={x.cents} />)}
         <Line label="Other deductions (car, super, D15…)" value={f.otherDed} indent />
+        {b.other.map((x) => <Sub key={x.id} label={secLabel(x.id)} value={x.cents} />)}
         <Line label="Deductions" value={f.deductions} strong />
         <Line label="Taxable income (estimate)" value={f.taxable} strong />
         <Line label="Tax already paid: withheld" value={f.withheld} indent />

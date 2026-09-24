@@ -89,8 +89,13 @@ async function loadOurs(fy: number): Promise<LoadedLedger> {
   }
   let yearSettings: LoadedLedger["yearSettings"] = { checks: {} };
   for (const y of years) {
+    // Stored as "personId:section" per person; a bare "section" is an older answer for the whole household.
     const applies = (y["applies"] ?? {}) as Record<string, boolean>;
-    for (const [sec, v] of Object.entries(applies)) settings.applies[`${y["fy"]}:${sec}`] = v;
+    for (const [k, v] of Object.entries(applies)) {
+      const [pid, sec] = k.includes(":") ? k.split(":") : [null, k];
+      if (pid == null) settings.applies[`${y["fy"]}:${sec}`] = v;
+      else if (nameOf.has(pid)) settings.applies[`${y["fy"]}:${nameOf.get(pid)}:${sec}`] = v;
+    }
     const ro = (y["rate_overrides"] ?? {}) as Record<string, number>;
     if (Object.keys(ro).length || y["mls_override"]) settings.rateOverrides[y["fy"] as number] = { ...ro, ...(y["mls_override"] ? { mlsFamily: y["mls_override"] as number } : {}) };
     if (y["fy"] === fy) { ids.year = y.id; yearSettings = { mlsOverride: (y["mls_override"] as number) || undefined, checks: (y["checks"] as Record<string, boolean>) ?? {} }; }

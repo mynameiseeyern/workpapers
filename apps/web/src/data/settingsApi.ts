@@ -8,11 +8,27 @@ async function upsert(collection: string, id: string | undefined, data: Record<s
   return id ? pb.collection(collection).update(id, data) : pb.collection(collection).create(data);
 }
 
-/** Say whether a schedule applies in a year (true / false), or clear the answer (null). */
-export async function setApplies(L: LoadedLedger, fy: number, updates: Partial<Record<SectionId, boolean | null>>) {
-  const current: Record<string, boolean> = {};
-  for (const [k, v] of Object.entries(L.ledger.settings.applies)) if (k.startsWith(`${fy}:`)) current[k.slice(String(fy).length + 1)] = v;
-  for (const [sec, v] of Object.entries(updates)) { if (v == null) delete current[sec]; else current[sec] = v; }
+/**
+ * Say whether a schedule applies to some people in a year (true / false), or clear the answer (null).
+ * Answers are stored per person as "personId:section". An older household-wide answer ("section") is
+ * copied onto each person the first time anyone changes that section, so the other person's answer stays put.
+ */
+export async function setApplies(L: LoadedLedger, fy: number, people: string[], updates: Partial<Record<SectionId, boolean | null>>) {
+  const idOf = L.peopleIds, current: Record<string, boolean> = {};
+  const everyone = Object.keys(idOf);
+  for (const [k, v] of Object.entries(L.ledger.settings.applies)) {
+    const parts = k.split(":");
+    if (parts[0] !== String(fy)) continue;
+    if (parts.length === 2) current[parts[1]!] = v;
+    else if (idOf[parts[1]!]) current[`${idOf[parts[1]!]}:${parts[2]}`] = v;
+  }
+  for (const [sec, v] of Object.entries(updates)) {
+    if (sec in current) {   // split an older household answer into per-person answers
+      for (const o of everyone) if (!(`${idOf[o]}:${sec}` in current)) current[`${idOf[o]}:${sec}`] = current[sec]!;
+      delete current[sec];
+    }
+    for (const o of people) { const k = `${idOf[o]}:${sec}`; if (v == null) delete current[k]; else current[k] = v; }
+  }
   return upsert("year_settings", L.ids.year, { fy, applies: current });
 }
 

@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Checkbox, Chip, Description, Input, Label, ListBox, Select, TextField, toast } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { carriedRates, fyLabel, rate, RATEBOOK, toCents, unconfirmed, type Engine, type SectionId } from "@workpapers/core";
+import { carriedRates, fyLabel, rate, RATEBOOK, rateStatus, rateYear, toCents, unconfirmed, type Engine, type RateKey, type SectionId } from "@workpapers/core";
 import { useState, type ReactNode } from "react";
 import type { LoadedLedger } from "../data/ledger";
 import { SECTIONS } from "../data/sections";
@@ -30,6 +30,16 @@ function Money(p: { label: string; value: string; onChange: (v: string) => void;
     </TextField>
   );
 }
+/** A link to the ATO page a rate comes from. */
+function AtoLink({ href }: { href: string }) {
+  return <a href={href} target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">ATO page ↗</a>;
+}
+const fmtRate = (key: RateKey, v: number) => {
+  const f = RATEBOOK[key].format;
+  if (f === "cents") return `${Math.round(v * 100)}c`;
+  if (f === "km") return `${v.toLocaleString("en-AU")} km`;
+  return v.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: v % 1 ? 2 : 0 });
+};
 const toNum = (s: string) => { const n = Number(s.replace(/[$,\s]/g, "")); return s.trim() && Number.isFinite(n) ? n : undefined; };
 const dollars = (c?: number) => (c ? (c / 100).toFixed(2) : "");
 
@@ -45,7 +55,6 @@ export function SetupPage({ e, L }: { e: Engine; L: LoadedLedger }) {
     catch (x) { setError((x as Error).message); } finally { setBusy(""); }
   };
   const fy = e.fy, ro = e.ledger.settings.rateOverrides[fy] ?? {};
-  const u = unconfirmed(e);
   const editable = L.editable;
 
   // ABN and household forms keep local edits until saved
@@ -58,12 +67,14 @@ export function SetupPage({ e, L }: { e: Engine; L: LoadedLedger }) {
   }])));
   const [rates, setRates] = useState({ wfh: ro.wfh != null ? String(ro.wfh) : "", car: ro.car != null ? String(ro.car) : "", mls: ro.mlsFamily != null ? String(ro.mlsFamily) : "" });
 
-  const appliesLabel = (id: SectionId) => {
-    const rec = e.appliesRecorded(id);
+  // Records of a person in a section (working from home counts towards work-related deductions).
+  const hasOwn = (id: SectionId, o: string) => e.hasRows(id, fy, o) || (id === "s07" && e.hasRows("s07a", fy, o));
+  const appliesLabel = (id: SectionId, o: string) => {
+    const rec = e.appliesRecorded(id, fy, o);
     if (rec === true) return <Chip size="sm" color="accent">applies</Chip>;
     if (rec === false) return <Chip size="sm">not this year</Chip>;
-    if (e.hasRows(id)) return <Chip size="sm" color="accent">has records</Chip>;
-    const sg = e.suggestApplies(id);
+    if (hasOwn(id, o)) return <Chip size="sm" color="accent">has records</Chip>;
+    const sg = e.suggestApplies(id, o);
     return <Chip size="sm" color="warning">{sg === true ? "not confirmed · applied last year" : sg === false ? "not confirmed · not last year" : "not confirmed"}</Chip>;
   };
 
@@ -72,34 +83,51 @@ export function SetupPage({ e, L }: { e: Engine; L: LoadedLedger }) {
       {error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Description>{error}</Alert.Description></Alert.Content></Alert>}
       {!editable && <p className="text-sm text-muted">The example year is read-only.</p>}
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Schedules in {fyLabel(fy)}</Card.Title>
-          <Card.Description>Say which parts of the return apply this year. "Not this year" moves a schedule out of the way and out of the totals; it can always come back.</Card.Description>
-        </Card.Header>
-        <Card.Content className="flex flex-col gap-1">
-          {editable && u.length > 0 && (
-            <div className="mb-2 flex flex-wrap items-center gap-3">
-              <span className="text-sm">{u.length} not confirmed.</span>
-              <Button size="sm" variant="primary" isPending={busy === "accept"} onPress={() => run("accept", () => setApplies(L, fy,
-                Object.fromEntries(u.map((id) => [id, e.suggestApplies(id) !== false]))), "Schedules confirmed")}>
-                {u.some((id) => e.suggestApplies(id) !== null) ? "Accept the suggestions" : "Mark all as applying"}
-              </Button>
-            </div>
-          )}
-          {DATA_SECTIONS.map((s) => {
-            const id = s.id as SectionId, rec = e.appliesRecorded(id);
-            return (
-              <div key={s.id} className="flex flex-wrap items-center gap-2 border-b border-separator py-1.5 last:border-0">
-                <span className="min-w-56 flex-1 text-sm">{s.name}{s.code && <span className="ml-2 text-xs text-muted">{s.code}</span>}</span>
-                {appliesLabel(id)}
-                {editable && rec !== true && <Button size="sm" variant="tertiary" onPress={() => run(`a-${id}`, () => setApplies(L, fy, { [id]: true }), `${s.name}: applies`)}>Applies</Button>}
-                {editable && rec !== false && !e.hasRows(id) && <Button size="sm" variant="tertiary" onPress={() => run(`a-${id}`, () => setApplies(L, fy, { [id]: false }), `${s.name}: not this year`)}>Not this year</Button>}
-              </div>
-            );
-          })}
-        </Card.Content>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {e.people.map((o) => {
+          const u = unconfirmed(e, o);
+          return (
+            <Card key={o}>
+              <Card.Header>
+                <Card.Title>Tax checklist — {o}</Card.Title>
+                <Card.Description>
+                  What applies to {o} in {fyLabel(fy)}. "Not this year" moves it out of the way and out of {o}'s totals; it can always come back.
+                  Items with shared records apply to both of you, so answering one answers both.
+                </Card.Description>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-1">
+                {editable && u.length > 0 && (
+                  <div className="mb-2 flex flex-wrap items-center gap-3">
+                    <span className="text-sm">{u.length} not confirmed.</span>
+                    <Button size="sm" variant="primary" isPending={busy === `accept-${o}`} onPress={() => run(`accept-${o}`, () => setApplies(L, fy, [o],
+                      Object.fromEntries(u.map((id) => [id, e.suggestApplies(id, o) !== false]))), `${o}'s checklist confirmed`)}>
+                      {u.some((id) => e.suggestApplies(id, o) !== null) ? "Accept the suggestions" : "Mark all as applying"}
+                    </Button>
+                  </div>
+                )}
+                {DATA_SECTIONS.map((s) => {
+                  const id = s.id as SectionId, rec = e.appliesRecorded(id, fy, o), shared = e.hasSharedRows(id);
+                  const who = shared ? e.people : [o];
+                  return (
+                    <div key={s.id} className="flex items-center gap-2 border-b border-separator py-2 last:border-0">
+                      <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                        <span className="text-sm">{s.name}{s.code && <span className="ml-2 text-xs text-muted">{s.code}</span>}</span>
+                        <div className="flex flex-wrap gap-1">{appliesLabel(id, o)}{shared && <Chip size="sm" variant="soft">shared</Chip>}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      {editable && rec !== true && <Button size="sm" variant="tertiary" isPending={busy === `a-${o}-${id}`}
+                        onPress={() => run(`a-${o}-${id}`, () => setApplies(L, fy, who, { [id]: true }), `${s.name}: applies${shared ? " to both" : ` to ${o}`}`)}>Applies</Button>}
+                      {editable && rec !== false && !who.some((p) => hasOwn(id, p)) && <Button size="sm" variant="tertiary" isPending={busy === `n-${o}-${id}`}
+                        onPress={() => run(`n-${o}-${id}`, () => setApplies(L, fy, who, { [id]: false }), `${s.name}: not this year${shared ? " for both" : ` for ${o}`}`)}>Not this year</Button>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card.Content>
+            </Card>
+          );
+        })}
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {e.people.map((o) => {
@@ -156,13 +184,27 @@ export function SetupPage({ e, L }: { e: Engine; L: LoadedLedger }) {
         </Card.Header>
         <Card.Content className="grid gap-3 sm:grid-cols-3">
           <Money label="Working from home, $ per hour" value={rates.wfh} onChange={(v) => setRates((r) => ({ ...r, wfh: v }))} placeholder={String(rate("wfh", fy))}
-            description={RATEBOOK.wfh.label} />
+            description={<>Fixed rate method · <AtoLink href={RATEBOOK.wfh.source} /></>} />
           <Money label="Car, $ per km" value={rates.car} onChange={(v) => setRates((r) => ({ ...r, car: v }))} placeholder={String(rate("car", fy))}
-            description="Cents per kilometre method" />
+            description={<>Cents per kilometre method · <AtoLink href={RATEBOOK.car.source} /></>} />
           <Money label="Medicare levy surcharge — family threshold" value={rates.mls} onChange={(v) => setRates((r) => ({ ...r, mls: v }))}
-            placeholder={String(rate("mls", fy))} description="Plus $1,500 per dependent child after the first" />
+            placeholder={String(rate("mls", fy))} description={<>Plus $1,500 per dependent child after the first · <AtoLink href={RATEBOOK.mls.source} /></>} />
           {editable && <div><Button size="sm" variant="primary" isPending={busy === "rates"} onPress={() => run("rates", () => saveRates(L, fy,
             Object.fromEntries(Object.entries({ wfh: toNum(rates.wfh), car: toNum(rates.car) }).filter(([, v]) => v != null)), toNum(rates.mls)), "Rates saved")}>Save</Button></div>}
+        </Card.Content>
+        <Card.Content className="flex flex-col">
+          <p className="mb-1 text-sm font-medium">All rates and thresholds used this year</p>
+          {(Object.keys(RATEBOOK) as RateKey[]).map((k) => {
+            const r = RATEBOOK[k], y = rateYear(k, fy);
+            return (
+              <div key={k} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-separator py-1.5 text-sm last:border-0">
+                <span className="min-w-56 flex-1">{r.label}</span>
+                <span className="tabular-nums font-medium">{fmtRate(k, y.value)}</span>
+                {rateStatus(k, fy) === "carried" && <Chip size="sm" color="warning">using {fyLabel(y.year)} — not yet published</Chip>}
+                <AtoLink href={r.source} />
+              </div>
+            );
+          })}
         </Card.Content>
       </Card>
     </div>

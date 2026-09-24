@@ -22,11 +22,11 @@ export function navState(e: Engine, scope: string[], view: string): NavState {
     const s = SECTIONS.find((x) => x.id === id)!;
     const top = s.parent ?? id;
     if (!isData(top)) return true;
-    if (!e.applies(top as SectionId)) return false;
+    if (!e.appliesFor(top as SectionId, scope)) return false;
     if (s.parent) return e.hasRows(id as SectionId) || view === id || shows(top);
     const kids = SECTIONS.filter((k) => k.parent === id);
     return e.hasRows(id as SectionId) || kids.some((k) => e.hasRows(k.id as SectionId) || view === k.id)
-      || e.appliesRecorded(id as SectionId) === true || view === id;
+      || scope.some((o) => e.appliesRecorded(id as SectionId, e.fy, o) === true) || view === id;
   };
   const basHolders = e.abnHolders(scope).filter((o) => e.gstRegistered(o));
   for (const s of SECTIONS) {
@@ -35,7 +35,7 @@ export function navState(e: Engine, scope: string[], view: string): NavState {
     if (s.id === "bas") { if (basHolders.length || view === "bas") visible.add(s.id); continue; }
     const top = s.parent ?? s.id;
     if (shows(s.id)) visible.add(s.id);
-    else if (!s.parent && isData(top) && e.applies(top as SectionId)) more.push(s.id);
+    else if (!s.parent && isData(top) && e.appliesFor(top as SectionId, scope)) more.push(s.id);
   }
   return { totals, visible, more };
 }

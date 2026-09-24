@@ -89,10 +89,10 @@ const TODO: [keyof Checks, string, string][] = [
   ["unpaid", "invoice{s} not yet paid or received", "s05"],
 ];
 
-/** Schedules nobody has said yes or no to this year and that have no rows. */
-export function unconfirmed(e: Engine): SectionId[] {
+/** Schedules a person hasn't said yes or no to this year and that have none of their rows. */
+export function unconfirmed(e: Engine, o: PersonId): SectionId[] {
   return (["s05", "s07", ...Object.keys(SCHEDULES)] as SectionId[])
-    .filter((id) => e.appliesRecorded(id) === null && !e.hasRows(id) && !(id === "s07" && e.hasRows("s07a")));
+    .filter((id) => e.appliesRecorded(id, e.fy, o) === null && !e.hasRows(id, e.fy, o) && !(id === "s07" && e.hasRows("s07a", e.fy, o)));
 }
 
 /** The Overview to-do list for the people in view, and how many checks are clear. */
@@ -111,8 +111,10 @@ export function todoList(e: Engine, scope: PersonId[], today: ISODate): { items:
     }
   }
   const allLodged = scope.every((o) => e.returnRecord(o)?.status === "lodged");
-  const u = unconfirmed(e);
-  if (u.length && !allLodged) items.push({ text: `${u.length} schedule${u.length === 1 ? "" : "s"} not confirmed for this year`, go: "setup" });
+  if (!allLodged) for (const o of scope) {
+    const u = unconfirmed(e, o);
+    if (u.length) items.push({ who: o, text: `${u.length} tax checklist item${u.length === 1 ? "" : "s"} not confirmed for this year`, go: "setup" });
+  }
   const car = carriedRates(e.fy);
   if (car.length) items.push({ text: `${car.length} rate${car.length === 1 ? "" : "s"} for this year not yet published by the ATO — using last year's`, go: "rates", soft: true });
   const ph = phaseOf(e.fy, today);

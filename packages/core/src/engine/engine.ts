@@ -77,33 +77,54 @@ export class Engine {
   rowsIn(section: SectionId, fy: FY = this.fy): Row[] {
     return this.ledger.rows.filter((r) => r.section === section && this.rowFY(r) === fy);
   }
-  hasRows(section: SectionId, fy: FY = this.fy): boolean { return this.rowsIn(section, fy).length > 0; }
+  /** Whether a section has rows this year — anyone's, or ones that belong at least partly to person `o`. */
+  hasRows(section: SectionId, fy: FY = this.fy, o?: PersonId): boolean {
+    return this.rowsIn(section, fy).some((r) => o == null || this.shareOf(r, o) > 0);
+  }
+  /** Rows that make a section count as in use: working from home rows count for work-related deductions. */
+  private inUse(section: SectionId, fy: FY, o?: PersonId): boolean {
+    return this.hasRows(section, fy, o) || (section === "s07" && this.hasRows("s07a", fy, o));
+  }
+  /** Whether a section has shared rows (owned by both people) this year or last. */
+  hasSharedRows(section: SectionId): boolean {
+    return [this.fy, this.fy - 1].some((fy) => this.rowsIn(section, fy).some((r) => r.owner == null));
+  }
 
   // ---------- which schedules apply ----------
-  appliesRecorded(section: SectionId, fy: FY = this.fy): boolean | null {
-    const v = this.ledger.settings.applies[appliesKey(fy, section)];
-    return v === true || v === false ? v : null;
+  // Each person answers for themselves. Without a person: the household view — it applies if it applies to anyone.
+  /** The recorded answer: true, false, or null when not confirmed yet. */
+  appliesRecorded(section: SectionId, fy: FY = this.fy, o?: PersonId): boolean | null {
+    const a = this.ledger.settings.applies, get = (k: string) => (a[k] === true || a[k] === false ? a[k]! : null);
+    if (o != null) return get(appliesKey(fy, section, o)) ?? get(appliesKey(fy, section));
+    const each = this.people.map((p) => this.appliesRecorded(section, fy, p));
+    if (each.some((v) => v === true)) return true;
+    return each.length > 0 && each.every((v) => v === false) ? false : null;
   }
   /** Suggestion from rows and last year: true, false, or null when there's nothing to go on. */
-  suggestApplies(section: SectionId): boolean | null {
-    if (this.hasRows(section)) return true;
-    const prev = this.appliesRecorded(section, this.fy - 1);
-    if (prev === true || this.hasRows(section, this.fy - 1)) return true;
+  suggestApplies(section: SectionId, o?: PersonId): boolean | null {
+    if (this.inUse(section, this.fy, o)) return true;
+    const prev = this.appliesRecorded(section, this.fy - 1, o);
+    if (prev === true || this.inUse(section, this.fy - 1, o)) return true;
     if (prev === false) return false;
     return null;
   }
-  applies(section: SectionId): boolean {
-    const a = this.appliesRecorded(section);
-    if (a !== null) return a;
-    if (this.hasRows(section)) return true;
-    return this.suggestApplies(section) !== false;
+  applies(section: SectionId, o?: PersonId): boolean {
+    if (o == null) return this.people.length ? this.people.some((p) => this.applies(section, p)) : this.appliesTo(section);
+    return this.appliesTo(section, o);
   }
+  private appliesTo(section: SectionId, o?: PersonId): boolean {
+    const a = this.appliesRecorded(section, this.fy, o);
+    if (a !== null) return a;
+    if (this.inUse(section, this.fy, o)) return true;
+    return this.suggestApplies(section, o) !== false;
+  }
+  /** Whether a section applies to anyone in `scope`. */
+  appliesFor(section: SectionId, scope: PersonId[]): boolean { return scope.some((o) => this.applies(section, o)); }
 
   /** People in scope who have business rows this year (and the business schedule applies). */
   abnHolders(scope: PersonId[] = this.people): PersonId[] {
-    if (!this.applies("s05")) return [];
     const seen = new Set(this.rowsIn("s05").map((r) => r.owner));
-    return scope.filter((o) => seen.has(o));
+    return scope.filter((o) => seen.has(o) && this.applies("s05", o));
   }
 
   // ---------- working from home ----------
@@ -111,12 +132,12 @@ export class Engine {
   /** Employment WFH hours per person, used for the phone & internet overlap rule (F2: business hours don't count). */
   wfhHoursBy(): Record<PersonId, number> {
     const by: Record<PersonId, number> = Object.fromEntries(this.people.map((o) => [o, 0]));
-    if (this.applies("s07")) for (const r of this.rowsIn("s07a"))
-      if (r.owner && this.wfhUse(r) !== "business") by[r.owner] = (by[r.owner] ?? 0) + n(r.hours);
+    for (const r of this.rowsIn("s07a"))
+      if (r.owner && this.applies("s07", r.owner) && this.wfhUse(r) !== "business") by[r.owner] = (by[r.owner] ?? 0) + n(r.hours);
     return by;
   }
   wfhTotals(scope: PersonId[] = this.people) {
-    const rows = this.applies("s07") ? this.rowsIn("s07a").filter((r) => this.inScope(r, scope)) : [];
+    const rows = this.rowsIn("s07a").filter((r) => this.inScope(r, scope) && this.applies("s07", r.owner ?? undefined));
     const by: Record<PersonId, number> = {}, byBiz: Record<PersonId, number> = {};
     for (const o of this.people) { by[o] = 0; byBiz[o] = 0; }
     let hours = 0, bizHours = 0;
@@ -136,7 +157,7 @@ export class Engine {
     const out: { r: Row; o: PersonId; share: number; portion: Cents; gst: Cents; depr: boolean; overlap: boolean }[] = [];
     for (const r of this.rowsIn("s07")) for (const o of scope) {
       const share = this.shareOf(r, o);
-      if (share <= 0) continue;
+      if (share <= 0 || !this.applies("s07", o)) continue;
       const portion = Math.round(r.amount * share);
       out.push({ r, o, share, portion, gst: r.noGst ? 0 : Math.round(r.gst * share), depr: r.category === TOOLS_CAT && portion > threshold,   // F1: the $300 test is for assets only
         overlap: r.category === PHONE_CAT && (hrs[o] ?? 0) > 0 });
@@ -166,8 +187,8 @@ export class Engine {
     const t = { sales: 0, gstOnSales: 0, gstOnPurchases: 0, expenses: 0, unpaidIncome: 0, rows,
       pool: [] as Row[], poolTotal: 0, psiDenied: [] as Row[], psiDeniedTotal: 0, homeOffice: 0, homeHours: 0 };
     const wfh = this.wfhRate();
-    if (this.applies("s07")) for (const r of this.rowsIn("s07a")) {
-      if (this.wfhUse(r) !== "business" || r.owner == null || !scope.includes(r.owner)) continue;
+    for (const r of this.rowsIn("s07a")) {
+      if (this.wfhUse(r) !== "business" || r.owner == null || !scope.includes(r.owner) || !this.applies("s07", r.owner)) continue;
       t.homeHours += n(r.hours); t.homeOffice += toCents(n(r.hours) * wfh);
     }
     t.expenses += t.homeOffice;   // fixed-rate running costs: no GST credit, still deductible under the PSI rules
@@ -214,9 +235,9 @@ export class Engine {
 
   // ---------- data-driven schedules ----------
   scheduleEntries(id: SectionId, scope: PersonId[] = this.people) {
-    if (!this.applies(id)) return [];
     const out: { r: Row; o: PersonId; share: number }[] = [];
     for (const r of this.rowsIn(id)) for (const o of scope) {
+      if (!this.applies(id, o)) continue;
       const share = this.shareOf(r, o);
       if (share > 0) out.push({ r, o, share });
     }
@@ -341,5 +362,31 @@ export class Engine {
     f.ccRoom = f.ccCap + f.ccCarry - f.concessional;
     f.payg = this.quarters.reduce((a, _q, i) => a + this.paygFor(i, o), 0);
     return f;
+  }
+
+  /**
+   * The subtotals behind a person's return lines, by schedule and by deduction category. Presentation only:
+   * `income` adds up to taxFigures().income, `work` to .workDed and `other` to .otherDed.
+   */
+  taxBreakdown(o: PersonId) {
+    const scope = [o];
+    const income: { id: SectionId; cents: Cents }[] = [], other: { id: SectionId; cents: Cents }[] = [];
+    for (const id of Object.keys(SCHEDULES) as SectionId[]) {
+      const g = SCHEDULES[id] as Schedule, v = this.scheduleTotals(id, scope).values;
+      const inc = (g.tax.income ?? []).reduce((a, k) => a + n(v[k]), 0);
+      if (inc) income.push({ id, cents: inc });
+      const ded = g.tax.ded ? n(v[g.tax.ded]) : 0;
+      if (ded) other.push({ id, cents: ded });
+    }
+    const byCat = new Map<string, Cents>();
+    for (const e of this.deductionTotals(scope).entries) {
+      if (e.overlap) continue;   // already inside the working-from-home fixed rate
+      const c = e.r.category || "Other work-related";
+      byCat.set(c, (byCat.get(c) ?? 0) + e.portion);
+    }
+    const w = this.wfhTotals(scope);
+    if (w.claim) byCat.set("Working from home — fixed rate", (byCat.get("Working from home — fixed rate") ?? 0) + w.claim);
+    const work = [...byCat].map(([category, cents]) => ({ category, cents })).sort((a, b) => a.category.localeCompare(b.category));
+    return { income, work, other };
   }
 }

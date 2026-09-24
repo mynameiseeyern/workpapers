@@ -15,7 +15,10 @@ export interface Ledger {
 }
 
 export interface Settings {
-  /** "fy:section" → true (applies) / false (not this year). Missing = not confirmed yet. */
+  /**
+   * "fy:person:section" → true (applies) / false (not this year) for one person. Missing = not confirmed yet.
+   * An older household-wide "fy:section" answer still counts for anyone without their own answer.
+   */
   applies: Record<string, boolean>;
   /** ABN set-up per person (GST registration, cash/accrual, when income counts). */
   abn: Record<PersonId, Partial<AbnSettings>>;
@@ -54,4 +57,4 @@ export const abnOf = (s: Settings, person: PersonId | null): AbnSettings => ({
 
 export const psiOf = (s: Settings, fy: FY, person: PersonId): PsiStatus => s.psi[`${fy}:${person}`] ?? "";
 
-export const appliesKey = (fy: FY, section: SectionId): string => `${fy}:${section}`;
+export const appliesKey = (fy: FY, section: SectionId, o?: PersonId): string => (o == null ? `${fy}:${section}` : `${fy}:${o}:${section}`);

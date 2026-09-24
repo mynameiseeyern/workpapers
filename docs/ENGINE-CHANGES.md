@@ -17,6 +17,7 @@ golden tests keep checking everything else.
 |----|--------|-----|
 | F1 | The $300 immediate-deduction test applies only to "tools & equipment" | It's a rule for depreciating assets. The prototype sent any work expense over $300 (a membership fee, a phone bill) to decline in value. |
 | F2 | Phone & internet overlap uses employment WFH hours only | The fixed rate only covers phone costs when employment hours are claimed. Business-only hours don't. |
+| F3 | The tax checklist ("which schedules apply") is answered per person | The prototype had one answer for the household, so saying yes for one person said yes for both. Each person's answer now gates only their own share of rows; an older household-wide answer still counts for anyone who hasn't answered. The household view applies a schedule if it applies to anyone. Working-from-home rows count as using work-related deductions. Golden fixtures (household-wide answers) are unchanged. |
 
 ## Money
 
