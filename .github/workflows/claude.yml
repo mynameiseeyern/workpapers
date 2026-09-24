@@ -37,6 +37,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           label_trigger: claude
           trigger_phrase: "@claude"
+          # Prints Claude's full output in the run log, so a failure shows its real message.
+          show_full_output: true
           claude_args: |
             --max-turns 40
             --allowedTools "Bash(pnpm install),Bash(pnpm test),Bash(pnpm typecheck),Bash(pnpm build),Bash(pnpm -r test),Bash(pnpm -r typecheck),Bash(pnpm --filter *),Bash(git status),Bash(git diff *),Bash(git log *)"
