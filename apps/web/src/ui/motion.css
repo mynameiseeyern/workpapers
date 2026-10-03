@@ -1,0 +1,91 @@
+/*
+ * Motion. This is a tool people open to get something done, so motion is crisp and fast and never decoration.
+ *
+ *  - Only transform and opacity move; colour changes fade. Nothing animates width, height or padding.
+ *  - Things respond at once: ease-out curves, under 300ms. Leaving is quicker than arriving.
+ *  - Press feedback 140ms. Menus and pickers 160ms in / 100ms out, growing from the control that opened them.
+ *    Tooltips 125ms. Dialogs 200ms, from the centre.
+ *  - Something that appears because you asked for it (the record form, the receipt preview) rises in over
+ *    200 to 240ms. A record you just saved is marked for a moment so you can see where it landed.
+ *  - Moving between screens, years and people is NOT animated: it happens too often to be worth the wait.
+ *  - Reduced motion keeps the fades and drops the movement.
+ */
+:root {
+  --wp-ease-out: cubic-bezier(0.23, 1, 0.32, 1);       /* things arriving or responding */
+  --wp-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);   /* things moving across the screen */
+  --wp-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);    /* panels sliding in */
+}
+
+/* Press feedback: the stock 250ms `ease` feels soft; this answers the finger straight away. */
+.button, .toggle-button {
+  transition: transform 140ms var(--wp-ease-out), background-color 120ms ease, box-shadow 120ms ease;
+}
+
+/* Menus, lists and pickers already grow from their trigger; start nearer full size and use a firmer curve. */
+:is(.popover, .select__popover, .combo-box__popover, .dropdown__popover, .date-picker__popover, .autocomplete__popover)[data-entering="true"] {
+  --tw-enter-scale: 0.96;
+  animation-duration: 160ms;
+  animation-timing-function: var(--wp-ease-out);
+}
+:is(.popover, .select__popover, .combo-box__popover, .dropdown__popover, .date-picker__popover, .autocomplete__popover, .tooltip)[data-exiting="true"] {
+  animation-duration: 100ms;
+  animation-timing-function: var(--wp-ease-out);
+}
+.tooltip[data-entering="true"] {
+  --tw-enter-scale: 0.97;
+  animation-duration: 125ms;
+  animation-timing-function: var(--wp-ease-out);
+}
+
+/* Dialogs settle from just under full size (stock shrinks from 105%), centred. */
+:is(.modal__container, .alert-dialog__container)[data-entering="true"] {
+  --tw-enter-scale: 0.97;
+  animation-duration: 200ms;
+  animation-timing-function: var(--wp-ease-out);
+}
+
+/* Something that appears because you asked for it: a form, a message. Leaves at once. */
+.enter {
+  transition: opacity 200ms var(--wp-ease-out), transform 200ms var(--wp-ease-out);
+}
+@starting-style {
+  .enter { opacity: 0; transform: translateY(6px); }
+}
+
+/* A status word swapping for another ("Saving…" to "Changes saved"): a soft crossfade, no movement. */
+.enter-fade {
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+@starting-style {
+  .enter-fade { opacity: 0; filter: blur(2px); }
+}
+
+/* The receipt preview: up from the bottom on a phone, in from the right when it sits beside the page. */
+.enter-panel {
+  transition: opacity 240ms var(--wp-ease-drawer), transform 240ms var(--wp-ease-drawer);
+}
+@starting-style {
+  .enter-panel { opacity: 0; transform: translateY(16px); }
+}
+@media (min-width: 80rem) {
+  @starting-style {
+    .enter-panel { opacity: 0; transform: translateX(24px); }
+  }
+}
+
+/* A record that was just added or changed: marked for a moment, then it settles. */
+@keyframes row-flash {
+  from { background-color: var(--accent-soft); }
+}
+.row-flash .table__cell {
+  animation: row-flash 1400ms var(--wp-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button, .toggle-button { transition: background-color 120ms ease, box-shadow 120ms ease; }
+  .enter, .enter-panel { transition: opacity 200ms ease; }
+  @starting-style {
+    .enter, .enter-panel { opacity: 0; transform: none; }
+    .enter-fade { opacity: 0; filter: none; }
+  }
+}

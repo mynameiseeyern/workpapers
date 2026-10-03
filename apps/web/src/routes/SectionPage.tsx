@@ -1,7 +1,7 @@
 import { Alert, Button, Card, toast } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { SCHEDULES, type Engine, type Row, type SectionId } from "@workpapers/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LoadedLedger, StoredRow } from "../data/ledger";
 import { EvidencePreview, type PreviewFile } from "../components/EvidencePreview";
 import { blankDraft, deleteRow, draftFrom, fileLabel, fileUrl, saveDraft, SHARED, type Draft } from "../data/rowsApi";
@@ -40,6 +40,11 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
     if (row) viewSaved(row, f);
   };
   const [saving, setSaving] = useState(false);
+  // the record just added or changed is marked in the list for a moment, so you can see where it landed
+  const [justSaved, setJustSaved] = useState("");
+  const settle = useRef<number | undefined>(undefined);
+  const mark = (id: string) => { setJustSaved(id); window.clearTimeout(settle.current); settle.current = window.setTimeout(() => setJustSaved(""), 1600); };
+  useEffect(() => () => window.clearTimeout(settle.current), []);
   const [error, setError] = useState("");
   const refresh = () => qc.invalidateQueries({ queryKey: ["ledger", "ours"] });
 
@@ -53,8 +58,9 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
   const save = async (d: Draft, removed: string[]) => {
     setSaving(true); setError("");
     try {
-      await saveDraft(d, loaded.peopleIds, removed);
+      const saved = await saveDraft(d, loaded.peopleIds, removed);
       await refresh();
+      mark(saved.id);
       toast(d.id ? "Changes saved" : "Record added", { variant: "success", timeout: 3000 });
       // keep the form open for the next entry when adding; close after an edit
       setDraft(d.id ? null : { ...blankDraft(section, d.owner, d.date), direction: d.direction, use: d.use, bizCategory: d.bizCategory, category: d.category });
@@ -90,7 +96,7 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
         </Card.Content>
       </Card>
       {error && (
-        <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Description>{error}</Alert.Description></Alert.Content></Alert>
+        <Alert status="danger" className="enter"><Alert.Indicator /><Alert.Content><Alert.Description>{error}</Alert.Description></Alert.Content></Alert>
       )}
       {draft && (
         <EntryForm key={formKey} draft={draft} people={e.people} years={years}
@@ -99,7 +105,7 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
       <RecordsView e={e} section={section} scope={scope}
         onEdit={editable ? (r) => { setDraft(draftFrom(r as StoredRow)); window.scrollTo({ top: 0, behavior: "smooth" }); } : undefined}
         onDelete={editable ? remove : undefined}
-        onViewFile={editable ? viewSaved : undefined} />
+        onViewFile={editable ? viewSaved : undefined} highlightId={justSaved} />
       {preview && <EvidencePreview file={preview} onClose={closePreview} />}
     </>
   );

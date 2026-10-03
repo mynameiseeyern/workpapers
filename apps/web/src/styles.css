@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "@heroui/styles";
 @import "./ui/theme.css";
+@import "./ui/motion.css";
 
 /* App shell — composed from HeroUI tokens only */
 html, body, #root { height: 100%; }

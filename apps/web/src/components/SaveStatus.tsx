@@ -1,5 +1,12 @@
 import { Button, Chip } from "@heroui/react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+
+/** "enter-fade" from the second state on, so a page doesn't fade its status in when it opens. */
+function useSwapClass() {
+  const opened = useRef(false);
+  useEffect(() => { opened.current = true; }, []);
+  return opened.current ? "enter-fade" : "";
+}
 
 interface Props {
   dirty: boolean;             // something differs from what's saved
@@ -14,12 +21,15 @@ interface Props {
 
 /** Stands in for an always-there Save button: says "No changes", offers Save once something changes, then "Changes saved". */
 export function SaveStatus(p: Props) {
+  const swap = useSwapClass(), state = p.dirty ? "dirty" : p.saved ? "saved" : "idle";
   return (
     <div className="flex min-h-9 flex-wrap items-center gap-2">
       <span role="status">
-        {p.dirty ? <Chip size="sm" color="warning">Unsaved changes</Chip>
-          : p.saved ? <Chip size="sm" color="success">Changes saved</Chip>
-          : <span className="text-sm text-muted">No changes</span>}
+        <span key={state} className={`inline-flex ${swap}`}>
+          {p.dirty ? <Chip size="sm" color="warning">Unsaved changes</Chip>
+            : p.saved ? <Chip size="sm" color="success">Changes saved</Chip>
+            : <span className="text-sm text-muted">No changes</span>}
+        </span>
       </span>
       {p.dirty ? (
         <>
@@ -35,9 +45,11 @@ export function SaveStatus(p: Props) {
 
 /** For a form that saves by itself: says what just happened, and offers another go if a save didn't go through. */
 export function AutoSaveStatus(p: { saving?: boolean; saved?: boolean; waiting?: boolean; invalid?: string; error?: string; onRetry?: () => void }) {
+  const swap = useSwapClass();
+  const state = p.invalid ? "invalid" : p.error ? "error" : p.saving ? "saving" : p.waiting ? "waiting" : p.saved ? "saved" : "idle";
   return (
     <div className="flex min-h-9 flex-wrap items-center gap-2 text-sm">
-      <span role="status" className="flex flex-wrap items-center gap-2">
+      <span role="status" key={state} className={`flex flex-wrap items-center gap-2 ${swap}`}>
         {p.invalid ? <Chip size="sm" color="danger">{p.invalid}</Chip>
           : p.error ? <><Chip size="sm" color="danger">Not saved</Chip><span className="text-muted">{p.error}</span></>
           : p.saving ? <span className="text-muted">Saving…</span>

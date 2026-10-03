@@ -19,7 +19,9 @@ export interface Column<T> {
  * Records as a table: one column per thing, figures right-aligned in their own columns.
  * Scrolls sideways on a phone rather than squeezing.
  */
-export function DataTable<T>(p: { label: string; columns: Column<T>[]; rows: T[]; rowKey: (row: T) => string; minWidth?: string; empty?: ReactNode }) {
+export function DataTable<T>(p: { label: string; columns: Column<T>[]; rows: T[]; rowKey: (row: T) => string; minWidth?: string; empty?: ReactNode;
+  /** The row to mark for a moment, e.g. the record just saved. */
+  highlightKey?: string }) {
   if (!p.rows.length && p.empty) return <>{p.empty}</>;
   const side = (c: Column<T>) => (c.align === "end" ? "text-right" : "");
   const hasFoot = p.columns.some((c) => c.foot != null);
@@ -34,7 +36,7 @@ export function DataTable<T>(p: { label: string; columns: Column<T>[]; rows: T[]
           </Table.Header>
           <Table.Body>
             {p.rows.map((r) => (
-              <Table.Row key={p.rowKey(r)} id={p.rowKey(r)}>
+              <Table.Row key={p.rowKey(r)} id={p.rowKey(r)} className={p.rowKey(r) === p.highlightKey ? "row-flash" : undefined}>
                 {p.columns.map((c) => <Table.Cell key={c.key} className={`align-top ${side(c)}`}>{c.render(r)}</Table.Cell>)}
               </Table.Row>
             ))}

@@ -52,7 +52,7 @@ export function EvidencePreview({ file, onClose }: { file: PreviewFile; onClose:
   const href = typeof file.source === "string" ? file.source : url;
   return (
     <aside role="dialog" aria-label={`Preview of ${file.name}`}
-      className="fixed inset-0 z-40 flex flex-col bg-surface xl:top-[53px] xl:left-auto xl:z-10 xl:w-[min(36vw,40rem)] xl:border-l xl:border-separator">
+      className="enter-panel fixed inset-0 z-40 flex flex-col bg-surface xl:top-[53px] xl:left-auto xl:z-10 xl:w-[min(36vw,40rem)] xl:border-l xl:border-separator">
       <div className="flex items-center gap-3 border-b border-separator px-4 py-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium" title={file.name}>{file.name}</span>
         {href && <a href={href} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-accent underline-offset-2 hover:underline">Open in a new tab ↗</a>}

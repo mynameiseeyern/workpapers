@@ -49,6 +49,8 @@ export function Components() {
   const [on, setOn] = useState(true);
   const [nav, setNav] = useState("i11");
   const [dirty, setDirty] = useState(true);
+  const [formShown, setFormShown] = useState(0);
+  const [flash, setFlash] = useState("");
 
   const columns: Column<Sample>[] = [
     { key: "date", label: "Date", width: "w-28", render: (r) => <span className="whitespace-nowrap">{r.date}</span> },
@@ -179,6 +181,30 @@ export function Components() {
             The books for a lodged quarter will change. You'll need to revise the BAS with the ATO to match.
           </Confirm>
         </div>
+      </Block>
+
+      <Block title="Motion" note="Crisp and fast. Only things you asked for animate in: a form, a menu, a dialog, the receipt preview. Moving between screens is instant, because it happens too often to wait for.">
+        <div className="grid gap-x-10 gap-y-2 text-sm sm:grid-cols-2">
+          <p><span className="font-medium">Press</span> <span className="text-muted">140ms. Buttons dip slightly under the finger.</span></p>
+          <p><span className="font-medium">Menus and pickers</span> <span className="text-muted">160ms in, 100ms out, growing from what opened them.</span></p>
+          <p><span className="font-medium">Dialogs</span> <span className="text-muted">200ms, from the centre.</span></p>
+          <p><span className="font-medium">Forms and messages</span> <span className="text-muted">rise in over 200ms and leave at once.</span></p>
+          <p><span className="font-medium">A saved record</span> <span className="text-muted">is marked for a moment so you can see where it landed.</span></p>
+          <p><span className="font-medium">Reduced motion</span> <span className="text-muted">keeps the fades, drops the movement.</span></p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" onPress={() => setFormShown((n) => n + 1)}>Show a form arriving</Button>
+          <Button size="sm" variant="secondary" onPress={() => { setFlash(""); window.setTimeout(() => setFlash("b"), 30); }}>Mark a saved record</Button>
+        </div>
+        {formShown > 0 && (
+          <Section key={formShown} className="enter max-w-xl" title="Add a record">
+            <FieldGroup columns={2}>
+              <TextBox label="Bank or account" value="" onChange={() => {}} />
+              <MoneyBox label="Gross interest" value="" onChange={() => {}} />
+            </FieldGroup>
+          </Section>
+        )}
+        <DataTable label="Dividends, to show a saved record" columns={columns.slice(0, 5)} rows={SAMPLE} rowKey={(r) => r.id} highlightKey={flash} />
       </Block>
 
       <Block title="Navigation" note="The list of screens down the side, with each schedule's total.">

@@ -201,9 +201,9 @@ export function SectionTotals({ e, section, scope }: { e: Engine; section: strin
   return <div className="flex flex-wrap gap-x-8 gap-y-3">{stats.map((x) => <Stat key={x.label} {...x} />)}</div>;
 }
 
-export function RecordsView({ e, section, scope, onEdit, onDelete, onViewFile }: {
+export function RecordsView({ e, section, scope, onEdit, onDelete, onViewFile, highlightId }: {
   e: Engine; section: string; scope: string[];
-  onEdit?: (r: Row) => void; onDelete?: (r: Row) => void; onViewFile?: (r: Row, name: string) => void;
+  onEdit?: (r: Row) => void; onDelete?: (r: Row) => void; onViewFile?: (r: Row, name: string) => void; highlightId?: string;
 }) {
   const s = sectionById(section);
   const rows = e.rowsIn(section as SectionId)
@@ -250,7 +250,7 @@ export function RecordsView({ e, section, scope, onEdit, onDelete, onViewFile }:
                 </Table.Header>
                 <Table.Body>
                   {rows.map((r) => (
-                    <Table.Row key={r.id} id={r.id}>
+                    <Table.Row key={r.id} id={r.id} className={r.id === highlightId ? "row-flash" : undefined}>
                       <Table.Cell className="whitespace-nowrap">{shortDate(r.date)}</Table.Cell>
                       <Table.Cell className="whitespace-nowrap">{who(r)}</Table.Cell>
                       <Table.Cell>

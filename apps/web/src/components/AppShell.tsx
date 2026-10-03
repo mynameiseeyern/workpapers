@@ -26,7 +26,7 @@ export function AppShell(p: Props) {
 
   const navItem = (s: (typeof SECTIONS)[number], muted: boolean) => (
     <button key={s.id} type="button" onClick={() => go(s.id)} aria-current={p.view === s.id ? "page" : undefined}
-      className={`flex w-full items-center rounded-2xl px-2.5 py-1.5 text-left text-sm ${s.parent ? "pl-7 text-[13px]" : ""} ${muted ? "text-muted" : ""} ${p.view === s.id ? "bg-accent-soft font-semibold text-accent-soft-foreground" : "hover:bg-surface-secondary"}`}>
+      className={`flex w-full items-center rounded-2xl px-2.5 py-1.5 text-left text-sm transition-colors duration-150 ${s.parent ? "pl-7 text-[13px]" : ""} ${muted ? "text-muted" : ""} ${p.view === s.id ? "bg-accent-soft font-semibold text-accent-soft-foreground" : "hover:bg-surface-secondary"}`}>
       <span className="flex-1">{s.name}</span>
       {!muted && totals[s.id] != null && <span className="ml-2 text-xs tabular-nums text-muted">{formatMoney(totals[s.id]!).replace(/\.\d\d$/, "")}</span>}
     </button>

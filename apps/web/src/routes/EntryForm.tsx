@@ -132,7 +132,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
   };
 
   return (
-    <Card>
+    <Card className="enter">
       <Card.Header>
         <Card.Title>{d.id ? "Edit record" : "Add a record"}</Card.Title>
         {g && <Card.Description>{g.sub}</Card.Description>}
