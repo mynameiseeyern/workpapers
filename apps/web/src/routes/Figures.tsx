@@ -135,16 +135,18 @@ export function FlowCard({ e, scope, onNavigate }: { e: Engine; scope: string[];
 }
 
 // ---------- records of one section (read-only for now; editing arrives in M2) ----------
-function figuresOf(r: Row): string {
+/** A record's figures, or one person's share of them. Each figure is rounded on its own, the same way the engine takes a share. */
+function figuresOf(r: Row, share = 1): string {
+  const part = (cents: number) => Math.round(cents * share);
   const g = SCHEDULES[r.section];
   if (g) {
     const d = (r.details ?? {}) as Record<string, unknown>;
     return g.fields.filter((f) => (f.t === "money" || f.t === "num") && Number(d[f.k]))
-      .map((f) => `${f.l} ${f.t === "money" ? m(Number(d[f.k])) : Number(d[f.k])}`).join(" · ");
+      .map((f) => `${f.l} ${f.t === "money" ? m(part(Number(d[f.k]))) : Math.round(Number(d[f.k]) * share * 100) / 100}`).join(" · ");
   }
   if (r.section === "s07a") return `${r.hours ?? 0} h · ${r.use === "business" ? "business" : "employment"}`;
-  const parts = [(r.section === "s05" ? (r.direction === "income" ? "In " : "Out ") : "") + m(r.amount)];
-  if (r.gst && !r.noGst) parts.push(`GST ${m(r.gst)}`);
+  const parts = [(r.section === "s05" ? (r.direction === "income" ? "In " : "Out ") : "") + m(part(r.amount))];
+  if (r.gst && !r.noGst) parts.push(`GST ${m(part(r.gst))}`);
   if (r.apportion != null && r.apportion !== 100) parts.push(`${r.apportion}% business`);
   return parts.join(" · ");
 }
@@ -213,6 +215,22 @@ export function RecordsView({ e, section, scope, onEdit, onDelete, onViewFile }:
     return scope.length === 1 ? `Shared · ${scope[0]} ${Math.round(e.shareOf(r, scope[0]!) * 100)}%` : `Shared ${first}/${100 - first}`;
   };
   const files = (r: Row) => ((r as Row & { files?: string[] }).files ?? []);
+  const pct = (r: Row, o: string) => Math.round(e.shareOf(r, o) * 100);
+  // A shared record shows who gets what: on a person's tab their share comes first, on the Household tab the whole with each share under it.
+  const figures = (r: Row) => {
+    if (r.owner != null) return figuresOf(r);
+    if (scope.length === 1) {
+      const o = scope[0]!;
+      return <>{figuresOf(r, e.shareOf(r, o))}<div className="text-xs text-muted">{o}'s {pct(r, o)}% of {figuresOf(r)}</div></>;
+    }
+    return (
+      <>{figuresOf(r)}
+        {e.people.filter((o) => e.shareOf(r, o) > 0).map((o) => (
+          <div key={o} className="text-xs text-muted">{o} {pct(r, o)}%: {figuresOf(r, e.shareOf(r, o))}</div>
+        ))}
+      </>
+    );
+  };
   return (
     <Card>
       <Card.Header>
@@ -247,7 +265,7 @@ export function RecordsView({ e, section, scope, onEdit, onDelete, onViewFile }:
                           </button>
                         ))}
                       </Table.Cell>
-                      <Table.Cell className="tabular-nums">{section === "s08" ? "" : figuresOf(r)}</Table.Cell>
+                      <Table.Cell className="tabular-nums">{section === "s08" ? "" : figures(r)}</Table.Cell>
                       <Table.Cell className="whitespace-nowrap text-right">
                         {e.lockReason(r) ? <Chip size="sm" title={`${e.lockReason(r)}. Reopen it to change this record.`}>locked</Chip> : <>
                           {onEdit && <Button size="sm" variant="ghost" onPress={() => onEdit(r)} aria-label="Edit">Edit</Button>}

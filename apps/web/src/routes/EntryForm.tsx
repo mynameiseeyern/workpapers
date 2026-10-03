@@ -1,5 +1,5 @@
 import { Button, Card, Checkbox, ComboBox, Description, FieldError, Input, Label, ListBox, Select, TextArea, TextField } from "@heroui/react";
-import { BIZ_CATS, SCHEDULES, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
+import { BIZ_CATS, formatMoney, SCHEDULES, toCents, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
 import { useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
 import { fileLabel, SHARED, validate, type Draft } from "../data/rowsApi";
@@ -110,6 +110,15 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
     if (Object.keys(e).length === 0) onSave(d, removed);
   };
 
+  // For a shared record, each amount shows who gets what as it's typed (rounded per person, as the engine does).
+  const split = (typed: string): string | undefined => {
+    if (d.owner !== SHARED || !typed.trim() || !d.sharePct.trim()) return undefined;
+    const amount = Number(typed.replace(/[$,\s]/g, "")), p = Number(d.sharePct);
+    if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(p) || p < 0 || p > 100) return undefined;
+    const cents = toCents(amount);
+    return `${people[0]} ${formatMoney(Math.round(cents * (p / 100)))} · ${people[1]} ${formatMoney(Math.round(cents * ((100 - p) / 100)))}`;
+  };
+
   const field = (f: Field) => {
     const k = `details.${f.k}`, v = d.details[f.k];
     if (f.t === "check") return <Tick key={f.k} label={f.l} checked={!!v} onChange={(x) => setDetail(f.k, x)} />;
@@ -117,7 +126,8 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
     if (f.t === "text") return <Suggest key={f.k} label={f.l} value={String(v ?? "")} onChange={(x) => setDetail(f.k, x)} error={errors[k]} required={f.req} options={usedBefore?.(k) ?? []} />;
     return (
       <Text key={f.k} label={f.l} value={String(v ?? "")} onChange={(x) => setDetail(f.k, x)} error={errors[k]} required={f.req}
-        type={f.t === "date" ? "date" : "text"} money={f.t === "money"} inputMode={f.t === "num" ? "decimal" : undefined} />
+        type={f.t === "date" ? "date" : "text"} money={f.t === "money"} inputMode={f.t === "num" ? "decimal" : undefined}
+        description={f.t === "money" ? split(String(v ?? "")) : undefined} />
     );
   };
 
@@ -170,7 +180,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                 <Suggest label="What for" value={d.description} onChange={(v) => set("description", v)} options={usedBefore?.("description", d.direction) ?? []} />
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <Text label="Amount incl. GST" value={d.amount} onChange={setAmount} error={errors.amount} money required />
+                <Text label="Amount incl. GST" value={d.amount} onChange={setAmount} error={errors.amount} money required description={split(d.amount)} />
                 {!d.noGst && (
                   <Text label="GST" value={d.gst} onChange={(v) => { gstTouched.current = true; set("gst", v); }} error={errors.gst} money
                     description={d.section === "s05" && !registered ? "Not GST-registered: GST is part of the cost" : "From the tax invoice"} />
