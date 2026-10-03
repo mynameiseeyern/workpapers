@@ -1,0 +1,51 @@
+/*
+ * Workpapers theme: HeroUI v3 retuned for a ledger. Tokens only, so every HeroUI component picks them up.
+ *
+ * Shape rule (one system, used everywhere):
+ *   controls (buttons, fields, toggles) 8px, containers (cards, tables, panels) 12px, status chips stay pills.
+ * Colour rule: neutral greys with a faint green cast, one accent (deep green), status colours only for status.
+ * Type: Geist for text, Geist Mono for money so columns of figures line up.
+ */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@theme {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+}
+
+:root {
+  --radius: 0.25rem;              /* cards and tables land on 12px */
+  --field-radius: 0.5rem;         /* fields 8px */
+  --field-border-width: 1px;      /* fields get a hairline instead of a floating shadow */
+  --accent: oklch(0.46 0.085 162);
+  --accent-foreground: oklch(0.985 0.004 160);
+}
+
+/* Light values. Scoped so they don't leak into dark mode (the app puts .dark on <html> to follow the system setting). */
+:root:not(.dark) {
+  --background: oklch(0.972 0.004 160);
+  --surface: oklch(0.995 0.002 160);
+  --overlay: oklch(0.995 0.002 160);
+  --field-background: oklch(0.995 0.002 160);
+  --border: oklch(0.895 0.006 160);
+  --separator: oklch(0.925 0.005 160);
+  --field-border: var(--border);
+  --muted: oklch(0.5 0.012 160);
+  /* containers sit on a hairline, not a drop shadow */
+  --surface-shadow: 0 0 0 1px var(--border);
+  --field-shadow: 0 0 0 0 transparent;
+}
+
+.dark {
+  --accent: oklch(0.74 0.11 162);
+  --accent-foreground: oklch(0.2 0.02 162);
+  --field-border: var(--border);
+  --surface-shadow: 0 0 0 1px var(--border);
+}
+
+/* Buttons and toggles follow the 8px control radius instead of the stock pill. */
+.button, .toggle-button { border-radius: calc(var(--radius) * 2); }
+
+/* Money and other figures: monospaced digits that line up in columns. */
+.figure { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }

@@ -7,6 +7,7 @@ import { SectionPage } from "./SectionPage";
 import { Placeholder } from "./Placeholder";
 import { BasLodging, ReturnLodging } from "./Lodging";
 import { SetupPage } from "./SetupPage";
+import { Components } from "./Components";
 
 const todayISO = () => new Date().toLocaleDateString("en-CA");
 const shortDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
@@ -52,6 +53,7 @@ interface Props {
 
 /** The main area: overview, return, BAS or one section's records, worked out by the engine. */
 export function Workspace(p: Props) {
+  if (p.view === "components") return <Components />;   // the component library, on show (not in the menu)
   const s = sectionById(p.view);
   const title = (
     <div>
