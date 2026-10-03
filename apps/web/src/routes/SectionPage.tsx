@@ -1,9 +1,10 @@
 import { Alert, Button, Card, toast } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Engine, Row, SectionId } from "@workpapers/core";
-import { useState } from "react";
+import { SCHEDULES, type Engine, type Row, type SectionId } from "@workpapers/core";
+import { useCallback, useState } from "react";
 import type { LoadedLedger, StoredRow } from "../data/ledger";
-import { blankDraft, deleteRow, draftFrom, fileUrl, saveDraft, SHARED, type Draft } from "../data/rowsApi";
+import { EvidencePreview, type PreviewFile } from "../components/EvidencePreview";
+import { blankDraft, deleteRow, draftFrom, fileLabel, fileUrl, saveDraft, SHARED, type Draft } from "../data/rowsApi";
 import { EntryForm } from "./EntryForm";
 import { RecordsView, SectionTotals } from "./Figures";
 
@@ -25,7 +26,16 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
   const qc = useQueryClient();
   const [draft, setDraftState] = useState<Draft | null>(null);
   const [formKey, setFormKey] = useState(0);
-  const setDraft = (d: Draft | null) => { setDraftState(d); setFormKey((k) => k + 1); };
+  const [preview, setPreview] = useState<PreviewFile | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
+  // a new or closed form drops the preview of a file that was only picked, never saved
+  const setDraft = (d: Draft | null) => { setDraftState(d); setFormKey((k) => k + 1); setPreview((p) => (p && typeof p.source !== "string" ? null : p)); };
+  const viewSaved = (r: Row, name: string) => setPreview({ name: fileLabel(name), source: fileUrl(r as StoredRow, name) });
+  const viewFromForm = (f: File | string) => {
+    if (typeof f !== "string") return setPreview({ name: f.name, source: f });
+    const row = e.rowsIn(section).find((r) => r.id === draft?.id);
+    if (row) viewSaved(row, f);
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const refresh = () => qc.invalidateQueries({ queryKey: ["ledger", "ours"] });
@@ -34,7 +44,8 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
     const t = todayISO(), fyOfT = Number(t.slice(5, 7)) >= 7 ? Number(t.slice(0, 4)) + 1 : Number(t.slice(0, 4));
     return fyOfT === e.fy ? t : `${e.fy}-06-30`;
   };
-  const defaultOwner = person !== "Household" ? person : section === "i10" ? SHARED : e.people[0]!;
+  // On the Household tab a new record in a schedule that can be shared starts as shared, split evenly; on a person's tab it's theirs.
+  const defaultOwner = person !== "Household" ? person : SCHEDULES[section]?.shared ? SHARED : e.people[0]!;
 
   const save = async (d: Draft, removed: string[]) => {
     setSaving(true); setError("");
@@ -81,12 +92,13 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
       )}
       {draft && (
         <EntryForm key={formKey} draft={draft} people={e.people} years={years}
-          gstRegistered={(o) => e.gstRegistered(o)} saving={saving} onSave={save} onCancel={() => { setDraft(null); setError(""); }} />
+          gstRegistered={(o) => e.gstRegistered(o)} saving={saving} onSave={save} onCancel={() => { setDraft(null); setError(""); }} onView={viewFromForm} />
       )}
       <RecordsView e={e} section={section} scope={scope}
         onEdit={editable ? (r) => { setDraft(draftFrom(r as StoredRow)); window.scrollTo({ top: 0, behavior: "smooth" }); } : undefined}
         onDelete={editable ? remove : undefined}
-        fileUrl={editable ? (r, n) => fileUrl(r as StoredRow, n) : undefined} />
+        onViewFile={editable ? viewSaved : undefined} />
+      {preview && <EvidencePreview file={preview} onClose={closePreview} />}
     </>
   );
 }

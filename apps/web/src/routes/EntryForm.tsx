@@ -1,7 +1,8 @@
 import { Button, Card, Checkbox, Description, FieldError, Input, Label, ListBox, Select, TextArea, TextField } from "@heroui/react";
 import { BIZ_CATS, SCHEDULES, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
 import { useRef, useState, type ReactNode } from "react";
-import { SHARED, validate, type Draft } from "../data/rowsApi";
+import { SaveStatus } from "../components/SaveStatus";
+import { fileLabel, SHARED, validate, type Draft } from "../data/rowsApi";
 
 interface Props {
   draft: Draft;
@@ -11,6 +12,8 @@ interface Props {
   saving: boolean;
   onSave: (d: Draft, removedFiles: string[]) => void;
   onCancel: () => void;
+  /** Look at an attached file: one just picked (a File) or a saved one (its stored name). */
+  onView?: (f: File | string) => void;
 }
 
 /** Which owners a section allows: shared rows only where a split makes sense. */
@@ -57,7 +60,7 @@ function Tick(p: { label: string; checked: boolean; onChange: (v: boolean) => vo
 }
 
 /** Add or edit one record. The fields follow the section; shared rows carry a split. */
-export function EntryForm({ draft, people, years, gstRegistered, saving, onSave, onCancel }: Props) {
+export function EntryForm({ draft, people, years, gstRegistered, saving, onSave, onCancel, onView }: Props) {
   const [d, setD] = useState<Draft>(draft);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [removed, setRemoved] = useState<string[]>([]);
@@ -68,6 +71,8 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
   const g = SCHEDULES[d.section];
   const owners = ownerOptions(d.section, people);
   const registered = d.owner !== SHARED && gstRegistered(d.owner);
+  // an edit only offers Save once something differs from the saved record
+  const dirty = removed.length > 0 || d.newFiles.length > 0 || JSON.stringify({ ...d, newFiles: 0 }) !== JSON.stringify({ ...draft, newFiles: 0 });
 
   const setAmount = (v: string) => {
     setD((x) => {
@@ -173,31 +178,44 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
           {d.section !== "s07a" && d.section !== "s08" && (
             <div className="flex flex-col gap-2 rounded-2xl bg-surface-secondary p-3">
               <span className="text-sm font-medium">Evidence{g?.doc ? ` (${g.doc})` : ""}</span>
-              {d.keepFiles.length > 0 && (
-                <ul className="flex flex-wrap gap-2 text-sm">
+              {d.keepFiles.length + d.newFiles.length > 0 && (
+                <ul className="flex flex-col gap-1.5 text-sm">
                   {d.keepFiles.map((f) => (
-                    <li key={f} className="flex items-center gap-1 rounded-full bg-surface px-3 py-1">
-                      {f.replace(/_[a-z0-9]{10}(\.[a-z0-9]+)$/i, "$1")}
-                      <button type="button" aria-label={`Remove ${f}`} className="text-muted hover:text-danger"
-                        onClick={() => { setRemoved((r) => [...r, f]); set("keepFiles", d.keepFiles.filter((x) => x !== f)); }}>✕</button>
+                    <li key={f} className="flex items-center gap-1 rounded-2xl bg-surface py-1 pr-1 pl-3">
+                      <span className="min-w-0 flex-1 truncate">{fileLabel(f)}</span>
+                      {onView && <Button size="sm" variant="ghost" onPress={() => onView(f)} aria-label={`View ${fileLabel(f)}`}>View</Button>}
+                      <Button size="sm" variant="ghost" className="text-danger" aria-label={`Remove ${fileLabel(f)}`}
+                        onPress={() => { setRemoved((r) => [...r, f]); set("keepFiles", d.keepFiles.filter((x) => x !== f)); }}>Remove</Button>
+                    </li>
+                  ))}
+                  {d.newFiles.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-2xl bg-surface py-1 pr-1 pl-3">
+                      <span className="min-w-0 flex-1 truncate">{f.name} <span className="text-muted">· not saved yet</span></span>
+                      {onView && <Button size="sm" variant="ghost" onPress={() => onView(f)} aria-label={`View ${f.name}`}>View</Button>}
+                      <Button size="sm" variant="ghost" className="text-danger" aria-label={`Remove ${f.name}`}
+                        onPress={() => set("newFiles", d.newFiles.filter((x) => x !== f))}>Remove</Button>
                     </li>
                   ))}
                 </ul>
               )}
-              {d.newFiles.length > 0 && <p className="text-sm">Adding: {d.newFiles.map((f) => f.name).join(", ")}</p>}
               <div className="flex flex-wrap items-center gap-3">
                 <input ref={fileInput} type="file" multiple accept="application/pdf,image/*" className="hidden"
-                  onChange={(e) => set("newFiles", [...d.newFiles, ...Array.from(e.target.files ?? [])])} />
+                  onChange={(e) => { set("newFiles", [...d.newFiles, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} />
                 <Button size="sm" variant="secondary" onPress={() => fileInput.current?.click()}>Attach receipt or statement</Button>
                 <Tick label="I have it on paper / elsewhere" checked={d.evidenceTick} onChange={(v) => set("evidenceTick", v)} />
               </div>
             </div>
           )}
 
-          <div className="flex gap-2">
-            <Button type="submit" variant="primary" isPending={saving}>{d.id ? "Save changes" : "Add"}</Button>
-            <Button variant="tertiary" onPress={onCancel}>Cancel</Button>
-          </div>
+          {d.id ? (
+            <SaveStatus dirty={dirty} busy={saving} saveLabel="Save changes" undoLabel="Cancel" onUndo={onCancel}
+              idle={<Button size="sm" variant="tertiary" onPress={onCancel}>Close</Button>} />
+          ) : (
+            <div className="flex gap-2">
+              <Button type="submit" variant="primary" isPending={saving}>Add</Button>
+              <Button variant="tertiary" onPress={onCancel}>Cancel</Button>
+            </div>
+          )}
         </form>
       </Card.Content>
     </Card>

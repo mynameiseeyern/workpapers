@@ -4,3 +4,8 @@
 /* App shell — composed from HeroUI tokens only */
 html, body, #root { height: 100%; }
 body { @apply bg-background text-foreground antialiased; }
+
+/* Evidence preview: on a wide screen it sits beside the page, so the page makes room for it. */
+@media (min-width: 80rem) {
+  html[data-evidence-preview] main { padding-right: calc(min(36vw, 40rem) + 1.5rem); }
+}

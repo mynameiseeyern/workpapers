@@ -1,5 +1,6 @@
 import { Button, Card, Chip, Table } from "@heroui/react";
 import { formatMoney, fyLabel, SCHEDULES, type Engine, type Row, type SectionId } from "@workpapers/core";
+import { fileLabel } from "../data/rowsApi";
 import { sectionById, SECTIONS } from "../data/sections";
 
 const m = (c: number) => formatMoney(c);
@@ -198,15 +199,19 @@ export function SectionTotals({ e, section, scope }: { e: Engine; section: strin
   return <div className="flex flex-wrap gap-x-8 gap-y-3">{stats.map((x) => <Stat key={x.label} {...x} />)}</div>;
 }
 
-export function RecordsView({ e, section, scope, onEdit, onDelete, fileUrl }: {
+export function RecordsView({ e, section, scope, onEdit, onDelete, onViewFile }: {
   e: Engine; section: string; scope: string[];
-  onEdit?: (r: Row) => void; onDelete?: (r: Row) => void; fileUrl?: (r: Row, name: string) => string;
+  onEdit?: (r: Row) => void; onDelete?: (r: Row) => void; onViewFile?: (r: Row, name: string) => void;
 }) {
   const s = sectionById(section);
   const rows = e.rowsIn(section as SectionId)
     .filter((r) => scope.some((o) => e.shareOf(r, o) > 0))
     .sort((a, b) => b.date.localeCompare(a.date));
-  const who = (r: Row) => (r.owner ?? `Shared ${r.sharePct ?? 50}/${100 - (r.sharePct ?? 50)}`);
+  const who = (r: Row) => {
+    if (r.owner) return r.owner;
+    const first = r.sharePct ?? 50;
+    return scope.length === 1 ? `Shared · ${scope[0]} ${Math.round(e.shareOf(r, scope[0]!) * 100)}%` : `Shared ${first}/${100 - first}`;
+  };
   const files = (r: Row) => ((r as Row & { files?: string[] }).files ?? []);
   return (
     <Card>
@@ -235,10 +240,11 @@ export function RecordsView({ e, section, scope, onEdit, onDelete, fileUrl }: {
                         {r.section === "s05" && r.direction === "income" && r.paid === "" && <Chip size="sm" color="warning" className="ml-2">not received</Chip>}
                         {r.section === "s05" && r.direction !== "income" && r.paid === "" && <Chip size="sm" color="warning" className="ml-2">not paid</Chip>}
                         {!r.evidenced && r.section !== "s07a" && r.section !== "s08" && <Chip size="sm" color="warning" className="ml-2">no evidence</Chip>}
-                        {fileUrl && files(r).map((f) => (
-                          <a key={f} href={fileUrl(r, f)} target="_blank" rel="noreferrer" className="ml-2 text-xs text-accent underline">
-                            {f.replace(/_[a-z0-9]{10}(\.[a-z0-9]+)$/i, "$1")}
-                          </a>
+                        {onViewFile && files(r).map((f) => (
+                          <button key={f} type="button" onClick={() => onViewFile(r, f)} title="View this file"
+                            className="ml-2 cursor-pointer text-xs text-accent underline">
+                            {fileLabel(f)}
+                          </button>
                         ))}
                       </Table.Cell>
                       <Table.Cell className="tabular-nums">{section === "s08" ? "" : figuresOf(r)}</Table.Cell>

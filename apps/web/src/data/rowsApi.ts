@@ -166,5 +166,8 @@ export async function deleteRow(r: StoredRow): Promise<() => Promise<void>> {
   };
 }
 
+/** The name a saved file was uploaded with (PocketBase adds a random suffix when storing it). */
+export const fileLabel = (name: string) => name.replace(/_[a-z0-9]{10}(\.[a-z0-9]+)$/i, "$1");
+
 export const fileUrl = (r: StoredRow, name: string, thumb?: string) =>
   pb.files.getURL(r.record, name, thumb ? { thumb } : undefined);
