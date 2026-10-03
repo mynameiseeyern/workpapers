@@ -45,7 +45,7 @@ function TodoCard({ e, scope, onNavigate }: { e: Engine; scope: string[]; onNavi
 }
 
 interface Props {
-  view: string; fy: number; person: string; example: boolean;
+  view: string; fy: number; person: string;
   loaded: LoadedLedger | undefined; loading: boolean; error: unknown; years: number[];
   onNavigate: (id: string) => void;
 }
@@ -60,7 +60,7 @@ export function Workspace(p: Props) {
         {s?.code && <span className="ml-2 align-middle text-xs font-normal text-muted">{s.code}</span>}
         {p.person !== "Household" && <span className="font-normal text-muted"> — {p.person}</span>}
       </h2>
-      <p className="text-sm text-muted">{fyLabel(p.fy)}{p.example && " · example year"}</p>
+      <p className="text-sm text-muted">{fyLabel(p.fy)}</p>
     </div>
   );
   if (p.loading) return <div className="flex max-w-4xl flex-col gap-4">{title}<Spinner /></div>;
@@ -107,7 +107,7 @@ export function Workspace(p: Props) {
         <Card.Description>A BAS appears here for anyone with GST-registered business income in {fyLabel(p.fy)}.</Card.Description></Card.Header></Card>
     );
   } else if (p.view === "setup") {
-    body = <SetupPage key={`setup-${p.fy}-${p.example}`} e={e} L={p.loaded} />;
+    body = <SetupPage key={`setup-${p.fy}`} e={e} L={p.loaded} />;
   } else if (s && s.group && s.group !== "Tools") {
     body = <SectionPage key={`${p.view}-${p.fy}`} e={e} loaded={p.loaded} section={p.view as SectionId} scope={scope} person={p.person} years={p.years} />;
   } else {

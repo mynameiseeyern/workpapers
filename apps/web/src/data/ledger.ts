@@ -1,10 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { emptySettings, exampleLedger, type Ledger, type Row, type SectionId } from "@workpapers/core";
+import { emptySettings, type Ledger, type Row, type SectionId } from "@workpapers/core";
 import type { RecordModel } from "pocketbase";
 import { pb } from "./pb";
 
-export type DataMode = "ours" | "example";
 
 const day = (v: unknown): string => (typeof v === "string" ? v.slice(0, 10) : "");
 const num = (v: unknown): number | undefined => (v === null || v === undefined || v === "" ? undefined : Number(v));
@@ -134,16 +133,12 @@ async function loadOurs(fy: number): Promise<LoadedLedger> {
   };
 }
 
-/** The ledger for a year: our records from PocketBase, or the made-up example year (never saved). */
-export function useLedger(mode: DataMode, fy: number, people: string[], enabled = true) {
+/** The ledger for a year: our records from PocketBase. */
+export function useLedger(fy: number, people: string[], enabled = true) {
   return useQuery({
-    queryKey: ["ledger", mode, fy, people.join("|")],
-    queryFn: async (): Promise<LoadedLedger> =>
-      mode === "example"
-        ? { ledger: exampleLedger([people[0] ?? "Person A", people[1] ?? "Person B"], fy), peopleIds: {}, editable: false,
-            ids: { abn: {}, personYear: {}, bas: {}, returns: {} }, events: [], yearSettings: { checks: {} } }
-        : loadOurs(fy),
-    staleTime: mode === "example" ? Infinity : 10_000,
+    queryKey: ["ledger", "ours", fy, people.join("|")],
+    queryFn: () => loadOurs(fy),
+    staleTime: 10_000,
     enabled,
   });
 }

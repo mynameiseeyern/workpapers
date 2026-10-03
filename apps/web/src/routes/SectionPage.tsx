@@ -1,10 +1,11 @@
 import { Alert, Button, Card, toast } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { SCHEDULES, type Engine, type Row, type SectionId } from "@workpapers/core";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { LoadedLedger, StoredRow } from "../data/ledger";
 import { EvidencePreview, type PreviewFile } from "../components/EvidencePreview";
 import { blankDraft, deleteRow, draftFrom, fileLabel, fileUrl, saveDraft, SHARED, type Draft } from "../data/rowsApi";
+import { usedBefore } from "../data/suggestions";
 import { EntryForm } from "./EntryForm";
 import { RecordsView, SectionTotals } from "./Figures";
 
@@ -26,6 +27,8 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
   const qc = useQueryClient();
   const [draft, setDraftState] = useState<Draft | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const rows = e.ledger.rows;
+  const used = useMemo(() => usedBefore(rows, section), [rows, section]);
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   // a new or closed form drops the preview of a file that was only picked, never saved
@@ -84,7 +87,6 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
           {editable && !draft && (
             <div><Button variant="primary" onPress={() => setDraft(blankDraft(section, defaultOwner, defaultDate()))}>Add a record</Button></div>
           )}
-          {!editable && <p className="text-sm text-muted">The example year is read-only. Switch back to your records to add or change anything.</p>}
         </Card.Content>
       </Card>
       {error && (
@@ -92,7 +94,7 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
       )}
       {draft && (
         <EntryForm key={formKey} draft={draft} people={e.people} years={years}
-          gstRegistered={(o) => e.gstRegistered(o)} saving={saving} onSave={save} onCancel={() => { setDraft(null); setError(""); }} onView={viewFromForm} />
+          gstRegistered={(o) => e.gstRegistered(o)} saving={saving} onSave={save} onCancel={() => { setDraft(null); setError(""); }} onView={viewFromForm} usedBefore={used} />
       )}
       <RecordsView e={e} section={section} scope={scope}
         onEdit={editable ? (r) => { setDraft(draftFrom(r as StoredRow)); window.scrollTo({ top: 0, behavior: "smooth" }); } : undefined}

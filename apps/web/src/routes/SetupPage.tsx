@@ -121,7 +121,6 @@ export function SetupPage({ e, L }: { e: Engine; L: LoadedLedger }) {
   return (
     <div className="flex flex-col gap-4">
       {error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Description>{error}</Alert.Description></Alert.Content></Alert>}
-      {!editable && <p className="text-sm text-muted">The example year is read-only.</p>}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {e.people.map((o) => {

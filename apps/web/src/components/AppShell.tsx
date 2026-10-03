@@ -1,5 +1,5 @@
 import { APP_VERSION } from "../version";
-import { Alert, Button, Label, ListBox, Select, Separator, Tabs } from "@heroui/react";
+import { Button, Label, ListBox, Select, Separator, Tabs } from "@heroui/react";
 import { formatMoney, fyLabel } from "@workpapers/core";
 import { useState, type ReactNode } from "react";
 import { SECTIONS, type Group } from "../data/sections";
@@ -10,7 +10,7 @@ interface Props {
   view: string; fy: number; person: string; years: number[]; people: string[];
   onNavigate: (view: string) => void; onYear: (fy: number) => void; onPerson: (p: string) => void;
   onSignOut: () => void; children: ReactNode;
-  example: boolean; onExample: (on: boolean) => void; nav?: NavState;
+  nav?: NavState;
   feedback: boolean; onFeedback: (on: boolean) => void;
 }
 const GROUPS: Group[] = ["", "Income", "Business", "Deductions", "Other", "Tools"];
@@ -62,10 +62,6 @@ export function AppShell(p: Props) {
             </Select.Popover>
           </Select>
 
-          <Button className="mt-2" variant={p.example ? "primary" : "tertiary"} size="sm" fullWidth onPress={() => p.onExample(!p.example)}>
-            {p.example ? "Back to our records" : "Show the example year"}
-          </Button>
-
           <Button className="mt-2 md:hidden" variant="secondary" size="sm" fullWidth onPress={() => setNavOpen((o) => !o)} aria-expanded={navOpen}>
             {current?.name ?? "Sections"} ▾
           </Button>
@@ -98,21 +94,12 @@ export function AppShell(p: Props) {
             </div>
             <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-muted">
               <span title="The commit this build came from">Version {APP_VERSION}</span>
-              {!p.example && <Button size="sm" variant="ghost" onPress={() => p.onFeedback(!p.feedback)}>{p.feedback ? "Stop feedback" : "Give feedback"}</Button>}
+              <Button size="sm" variant="ghost" onPress={() => p.onFeedback(!p.feedback)}>{p.feedback ? "Stop feedback" : "Give feedback"}</Button>
             </div>
           </div>
         </nav>
 
         <main className="min-w-0 flex-1 px-4 pt-5 pb-20 md:px-6">
-          {p.example && (
-            <Alert status="accent" className="mb-4 max-w-4xl">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>Example year</Alert.Title>
-                <Alert.Description>Made-up figures for two people, showing how records flow into the BAS and the tax return. Nothing here is saved or mixed with your records.</Alert.Description>
-              </Alert.Content>
-            </Alert>
-          )}
           {p.children}
         </main>
       </div>

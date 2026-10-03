@@ -23,7 +23,6 @@ export function Placeholder({ view, fy, person }: { view: string; fy: number; pe
           <Card.Title>Arrives in {WHEN[view] ?? "M2"}</Card.Title>
           <Card.Description>
             The calculation engine is in (M1). Entering and editing records arrives in M2; Setup, lodging and locks in M3.
-            Try "Show the example year" to see how the figures flow.
           </Card.Description>
         </Card.Header>
       </Card>

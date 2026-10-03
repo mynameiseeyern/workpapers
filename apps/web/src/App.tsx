@@ -15,7 +15,7 @@ const todayISO = () => new Date().toLocaleDateString("en-CA");
 export function App() {
   const [signedIn, setSignedIn] = useState(pb.authStore.isValid);
   const currentFY = fyOf(todayISO());
-  const defaults = useMemo(() => ({ view: "overview", fy: currentFY, person: "Household", data: "ours" as const }), [currentFY]);
+  const defaults = useMemo(() => ({ view: "overview", fy: currentFY, person: "Household" }), [currentFY]);
   const [url, setUrl] = useUrlState(defaults);
   const [people, setPeople] = useState<string[]>(["Ee", "Darrelle"]);
   const [feedback, setFeedback] = useState(false);
@@ -28,8 +28,8 @@ export function App() {
       .catch(() => { /* schema not migrated yet: keep defaults */ });
   }, [signedIn]);
 
-  const ledger = useLedger(url.data, url.fy, people, signedIn);
-  useLiveUpdates(signedIn && url.data === "ours");
+  const ledger = useLedger(url.fy, people, signedIn);
+  useLiveUpdates(signedIn);
   const nav = useMemo(() => {
     if (!ledger.data) return undefined;
     const e = new Engine(ledger.data.ledger, url.fy);
@@ -45,12 +45,12 @@ export function App() {
       view={url.view} fy={url.fy} person={url.person} years={years} people={people}
       onNavigate={(view) => setUrl({ view })} onYear={(fy) => setUrl({ fy })} onPerson={(person) => setUrl({ person })}
       onSignOut={() => pb.authStore.clear()}
-      feedback={feedback} onFeedback={setFeedback} example={url.data === "example"} onExample={(on) => setUrl({ data: on ? "example" : "ours" })} nav={nav}
+      feedback={feedback} onFeedback={setFeedback} nav={nav}
     >
-      <Workspace view={url.view} fy={url.fy} person={url.person} example={url.data === "example"}
+      <Workspace view={url.view} fy={url.fy} person={url.person}
         loaded={ledger.data} loading={ledger.isLoading} error={ledger.error} years={years} onNavigate={(view) => setUrl({ view })} />
     </AppShell>
-    {feedback && url.data === "ours" && <Suspense fallback={null}><FeedbackMode onClose={() => setFeedback(false)} /></Suspense>}
+    {feedback && <Suspense fallback={null}><FeedbackMode onClose={() => setFeedback(false)} /></Suspense>}
     </>
   );
 }

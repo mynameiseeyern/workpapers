@@ -1,4 +1,4 @@
-import { Button, Card, Checkbox, Description, FieldError, Input, Label, ListBox, Select, TextArea, TextField } from "@heroui/react";
+import { Button, Card, Checkbox, ComboBox, Description, FieldError, Input, Label, ListBox, Select, TextArea, TextField } from "@heroui/react";
 import { BIZ_CATS, SCHEDULES, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
 import { useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
@@ -12,6 +12,8 @@ interface Props {
   saving: boolean;
   onSave: (d: Draft, removedFiles: string[]) => void;
   onCancel: () => void;
+  /** What's been typed before in a text box ("party", "description" or "details.<key>"), most used first. */
+  usedBefore?: (field: string, direction?: "income" | "expense") => string[];
   /** Look at an attached file: one just picked (a File) or a saved one (its stored name). */
   onView?: (f: File | string) => void;
 }
@@ -33,6 +35,22 @@ function Text(p: { label: string; value: string; onChange: (v: string) => void; 
       {p.description && !p.error && <Description>{p.description}</Description>}
       {p.error && <FieldError>{p.error}</FieldError>}
     </TextField>
+  );
+}
+
+/** A text box that offers what has been typed in it before. Anything new can still be typed. */
+function Suggest(p: { label: string; value: string; onChange: (v: string) => void; options: string[]; error?: string; required?: boolean; className?: string }) {
+  if (!p.options.length) return <Text label={p.label} value={p.value} onChange={p.onChange} error={p.error} required={p.required} className={p.className} />;
+  return (
+    <ComboBox allowsCustomValue menuTrigger="focus" validationBehavior="aria" className={p.className ?? "w-full"} inputValue={p.value} onInputChange={p.onChange}
+      isInvalid={!!p.error} isRequired={p.required}>
+      <Label>{p.label}</Label>
+      <ComboBox.InputGroup><Input /><ComboBox.Trigger /></ComboBox.InputGroup>
+      <ComboBox.Popover>
+        <ListBox>{p.options.map((o) => <ListBox.Item key={o} id={o} textValue={o}>{o}</ListBox.Item>)}</ListBox>
+      </ComboBox.Popover>
+      {p.error && <FieldError>{p.error}</FieldError>}
+    </ComboBox>
   );
 }
 
@@ -60,7 +78,7 @@ function Tick(p: { label: string; checked: boolean; onChange: (v: boolean) => vo
 }
 
 /** Add or edit one record. The fields follow the section; shared rows carry a split. */
-export function EntryForm({ draft, people, years, gstRegistered, saving, onSave, onCancel, onView }: Props) {
+export function EntryForm({ draft, people, years, gstRegistered, saving, onSave, onCancel, onView, usedBefore }: Props) {
   const [d, setD] = useState<Draft>(draft);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [removed, setRemoved] = useState<string[]>([]);
@@ -96,6 +114,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
     const k = `details.${f.k}`, v = d.details[f.k];
     if (f.t === "check") return <Tick key={f.k} label={f.l} checked={!!v} onChange={(x) => setDetail(f.k, x)} />;
     if (f.t === "sel") return <Choice key={f.k} label={f.l} value={String(v ?? "")} options={f.opts ?? []} onChange={(x) => setDetail(f.k, x)} error={errors[k]} />;
+    if (f.t === "text") return <Suggest key={f.k} label={f.l} value={String(v ?? "")} onChange={(x) => setDetail(f.k, x)} error={errors[k]} required={f.req} options={usedBefore?.(k) ?? []} />;
     return (
       <Text key={f.k} label={f.l} value={String(v ?? "")} onChange={(x) => setDetail(f.k, x)} error={errors[k]} required={f.req}
         type={f.t === "date" ? "date" : "text"} money={f.t === "money"} inputMode={f.t === "num" ? "decimal" : undefined} />
@@ -146,8 +165,9 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                   className="w-full sm:w-1/3" />
               )}
               <div className="grid gap-3 sm:grid-cols-2">
-                <Text label={d.section === "s05" && d.direction === "income" ? "Client" : "Supplier"} value={d.party} onChange={(v) => set("party", v)} error={errors.party} />
-                <Text label="What for" value={d.description} onChange={(v) => set("description", v)} />
+                <Suggest label={d.section === "s05" && d.direction === "income" ? "Client" : "Supplier"} value={d.party} onChange={(v) => set("party", v)} error={errors.party}
+                  options={usedBefore?.("party", d.direction) ?? []} />
+                <Suggest label="What for" value={d.description} onChange={(v) => set("description", v)} options={usedBefore?.("description", d.direction) ?? []} />
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Text label="Amount incl. GST" value={d.amount} onChange={setAmount} error={errors.amount} money required />

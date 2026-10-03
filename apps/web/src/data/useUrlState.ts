@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
-/** View, year, person and data source (our records or the example year) live in the URL so every screen is linkable and survives reloads. */
-export interface UrlState { view: string; fy: number; person: string; data: "ours" | "example" }
+/** View, year and person live in the URL so every screen is linkable and survives reloads. */
+export interface UrlState { view: string; fy: number; person: string }
 
 const read = (defaults: UrlState): UrlState => {
   const p = new URLSearchParams(window.location.search);
@@ -9,7 +9,6 @@ const read = (defaults: UrlState): UrlState => {
     view: p.get("view") ?? defaults.view,
     fy: Number(p.get("fy")) || defaults.fy,
     person: p.get("person") ?? defaults.person,
-    data: p.get("data") === "example" ? "example" : "ours",
   };
 };
 
@@ -24,7 +23,6 @@ export function useUrlState(defaults: UrlState) {
     setState((prev) => {
       const next = { ...prev, ...patch };
       const q = new URLSearchParams({ view: next.view, fy: String(next.fy), person: next.person });
-      if (next.data === "example") q.set("data", "example");
       window.history.pushState(null, "", `?${q.toString()}`);
       return next;
     });
