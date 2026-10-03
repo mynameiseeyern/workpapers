@@ -4,6 +4,7 @@ import { formatMoney, fyLabel, phaseOf, toCents, type Engine } from "@workpapers
 import { useState } from "react";
 import type { LoadedLedger, LockEvent } from "../data/ledger";
 import { lodgeBas, lodgeReturn, savePayg, type LockAction } from "../data/settingsApi";
+import { useSwapClass } from "../ui/motion";
 
 const m = formatMoney;
 const todayISO = () => new Date().toLocaleDateString("en-CA");
@@ -27,7 +28,7 @@ function ConfirmPanel(p: {
     setErr(""); p.onGo(reason.trim());
   };
   return (
-    <div className={`mt-3 flex flex-col gap-3 rounded-2xl p-4 ${p.mode === "reopened" ? "bg-danger-soft" : "bg-surface-secondary"}`}>
+    <div className={`enter mt-3 flex flex-col gap-3 rounded-2xl p-4 ${p.mode === "reopened" ? "bg-danger-soft" : "bg-surface-secondary"}`}>
       <p className="font-semibold">{p.title}</p>
       {p.mode === "lodged" && <p className="text-sm">These figures are saved as the lodged record, and the records behind them become read-only. Check them against what was lodged.</p>}
       {p.mode === "reopened" && <p className="text-sm"><strong>This has been lodged.</strong> Any change from here means the workpapers no longer match what the ATO has, and an amendment will be needed. The reason is kept in the history.</p>}
@@ -86,10 +87,17 @@ function History({ events, prefix }: { events: LockEvent[]; prefix: string }) {
   );
 }
 
-const statusChip = (s: string | undefined, on?: string) =>
-  s === "lodged" ? <Chip size="sm" color="accent">lodged {shortDate(on)} · locked</Chip>
-    : s === "reopened" ? <Chip size="sm" color="warning">reopened</Chip>
-    : <Chip size="sm">not lodged</Chip>;
+/** Where a quarter or a return stands. When it changes in front of you (you just lodged it) the new status settles into place. */
+function StatusChip({ status, on }: { status: string | undefined; on?: string }) {
+  const swap = useSwapClass("enter-pop");
+  return (
+    <span key={status ?? "open"} className={`inline-flex ${swap}`}>
+      {status === "lodged" ? <Chip size="sm" color="accent">lodged {shortDate(on)} · locked</Chip>
+        : status === "reopened" ? <Chip size="sm" color="warning">reopened</Chip>
+        : <Chip size="sm">not lodged</Chip>}
+    </span>
+  );
+}
 
 /** Quarterly BAS for one ABN holder, with PAYG instalments and lodging. */
 export function BasLodging({ e, L, o }: { e: Engine; L: LoadedLedger; o: string }) {
@@ -161,7 +169,7 @@ export function BasLodging({ e, L, o }: { e: Engine; L: LoadedLedger; o: string 
                           </TextField>
                         ) : <span className="tabular-nums">{m(e.paygFor(i, o))}</span>}
                       </Table.Cell>
-                      <Table.Cell>{statusChip(rec?.status, rec?.lodgedOn)}</Table.Cell>
+                      <Table.Cell><StatusChip status={rec?.status} on={rec?.lodgedOn} /></Table.Cell>
                       <Table.Cell className="text-right whitespace-nowrap">
                         {L.editable && (!rec || rec.status === "open") && <Button size="sm" variant="primary" onPress={() => setOpen({ i, mode: "lodged" })}>Mark lodged…</Button>}
                         {L.editable && rec?.status === "lodged" && <Button size="sm" variant="secondary" onPress={() => setOpen({ i, mode: "reopened" })}>Reopen…</Button>}
@@ -235,7 +243,7 @@ export function ReturnLodging({ e, L, scope, openItems }: { e: Engine; L: Loaded
             <div key={o}>
               <div className="flex flex-wrap items-center gap-3">
                 <strong className="min-w-24">{o}</strong>
-                {statusChip(rec?.status, rec?.lodgedOn)}
+                <StatusChip status={rec?.status} on={rec?.lodgedOn} />
                 {lf && <span className="text-sm text-muted">taxable income as lodged {m(lf.taxable ?? 0)}</span>}
                 {lf && moved !== 0 && <Chip size="sm" color="warning">{moved > 0 ? "+" : "−"}{m(Math.abs(moved))} since lodged</Chip>}
                 <span className="flex-1" />

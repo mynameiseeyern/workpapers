@@ -1,12 +1,6 @@
 import { Button, Chip } from "@heroui/react";
-import { useEffect, useRef, type ReactNode } from "react";
-
-/** "enter-fade" from the second state on, so a page doesn't fade its status in when it opens. */
-function useSwapClass() {
-  const opened = useRef(false);
-  useEffect(() => { opened.current = true; }, []);
-  return opened.current ? "enter-fade" : "";
-}
+import type { ReactNode } from "react";
+import { useSwapClass } from "../ui/motion";
 
 interface Props {
   dirty: boolean;             // something differs from what's saved

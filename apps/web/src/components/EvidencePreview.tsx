@@ -1,5 +1,5 @@
 import { Button, Spinner } from "@heroui/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** A file to look at: one just picked in the form (not saved yet), or the address of a saved one. */
 export interface PreviewFile { name: string; source: File | string }
@@ -21,6 +21,11 @@ export function EvidencePreview({ file, onClose }: { file: PreviewFile; onClose:
   const kind = kindOf(file);
   const [url, setUrl] = useState("");
   const [failed, setFailed] = useState(false);
+  // Closing: it slides back out first (160ms), then goes.
+  const [leaving, setLeaving] = useState(false);
+  const gone = useRef<number | undefined>(undefined);
+  const close = useCallback(() => { setLeaving(true); window.clearTimeout(gone.current); gone.current = window.setTimeout(onClose, 160); }, [onClose]);
+  useEffect(() => () => window.clearTimeout(gone.current), []);
 
   useEffect(() => {
     let made = "", stale = false;
@@ -44,19 +49,19 @@ export function EvidencePreview({ file, onClose }: { file: PreviewFile; onClose:
 
   // Escape closes it when it covers the screen; beside the page it stays put while you type.
   useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape" && !window.matchMedia(WIDE).matches) onClose(); };
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape" && !window.matchMedia(WIDE).matches) close(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   const href = typeof file.source === "string" ? file.source : url;
   return (
-    <aside role="dialog" aria-label={`Preview of ${file.name}`}
+    <aside role="dialog" aria-label={`Preview of ${file.name}`} data-leaving={leaving || undefined}
       className="enter-panel fixed inset-0 z-40 flex flex-col bg-surface xl:top-[53px] xl:left-auto xl:z-10 xl:w-[min(36vw,40rem)] xl:border-l xl:border-separator">
       <div className="flex items-center gap-3 border-b border-separator px-4 py-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium" title={file.name}>{file.name}</span>
         {href && <a href={href} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-accent underline-offset-2 hover:underline">Open in a new tab ↗</a>}
-        <Button size="sm" variant="tertiary" onPress={onClose}>Close</Button>
+        <Button size="sm" variant="tertiary" onPress={close}>Close</Button>
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-surface-secondary">
         {failed || kind === "other" ? (

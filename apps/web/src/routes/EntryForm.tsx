@@ -2,6 +2,7 @@ import { Button, Card, Checkbox, ComboBox, Description, FieldError, Input, Label
 import { BIZ_CATS, formatMoney, SCHEDULES, toCents, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
 import { useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
+import { useSwapClass } from "../ui/motion";
 import { fileLabel, SHARED, validate, type Draft } from "../data/rowsApi";
 
 interface Props {
@@ -84,6 +85,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
   const [removed, setRemoved] = useState<string[]>([]);
   const gstTouched = useRef(!!draft.gst);
   const fileInput = useRef<HTMLInputElement>(null);
+  const arrive = useSwapClass();   // boxes that appear after a choice fade in; nothing fades just because the form opened
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
   const setDetail = (k: string, v: string | boolean) => setD((x) => ({ ...x, details: { ...x.details, [k]: v } }));
   const g = SCHEDULES[d.section];
@@ -143,7 +145,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
             <Choice label={d.section === "s05" ? "ABN holder" : "Whose"} value={d.owner} options={owners} onChange={(v) => set("owner", v)} />
             {d.owner === SHARED && (
               <Text label={`${people[0]}'s share %`} value={d.sharePct} onChange={(v) => set("sharePct", v)} error={errors.sharePct}
-                inputMode="decimal" description={`${people[1]} gets the rest`} />
+                inputMode="decimal" description={`${people[1]} gets the rest`} className={`w-full ${arrive}`} />
             )}
             <Text label={g?.dateLabel ?? (d.section === "s05" ? "Invoice date" : d.section === "s07a" ? "Week starting" : "Date")}
               type="date" value={d.date} onChange={(v) => { if (!d.id && d.paid === d.date) set("paid", v); set("date", v); }} error={errors.date} required />
@@ -183,7 +185,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                 <Text label="Amount incl. GST" value={d.amount} onChange={setAmount} error={errors.amount} money required description={split(d.amount)} />
                 {!d.noGst && (
                   <Text label="GST" value={d.gst} onChange={(v) => { gstTouched.current = true; set("gst", v); }} error={errors.gst} money
-                    description={d.section === "s05" && !registered ? "Not GST-registered: GST is part of the cost" : "From the tax invoice"} />
+                    description={d.section === "s05" && !registered ? "Not GST-registered: GST is part of the cost" : "From the tax invoice"} className={`w-full ${arrive}`} />
                 )}
                 <div className="flex items-end pb-2"><Tick label="No GST on this" checked={d.noGst} onChange={(v) => set("noGst", v)} /></div>
               </div>
@@ -191,14 +193,14 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                 <Choice label="Category" value={d.category} options={WORK_CATS} onChange={(v) => set("category", v)} />
               )}
               {d.section === "s05" && d.direction === "expense" && (
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className={`grid gap-3 sm:grid-cols-3 ${arrive}`}>
                   <Choice label="Expense category" value={d.bizCategory} options={BIZ_CATS} onChange={(v) => set("bizCategory", v)} className="sm:col-span-2" />
                   <Text label="Business use %" value={d.apportion} onChange={(v) => set("apportion", v)} error={errors.apportion} inputMode="decimal" />
                 </div>
               )}
               {d.section === "s05" && (
                 <div className="grid items-end gap-3 sm:grid-cols-3">
-                  {!d.unpaid && <Text label={d.direction === "income" ? "Date received" : "Date paid"} type="date" value={d.paid} onChange={(v) => set("paid", v)} error={errors.paid} />}
+                  {!d.unpaid && <Text label={d.direction === "income" ? "Date received" : "Date paid"} type="date" value={d.paid} onChange={(v) => set("paid", v)} error={errors.paid} className={`w-full ${arrive}`} />}
                   <div className="pb-2"><Tick label={d.direction === "income" ? "Not received yet" : "Not paid yet"} checked={d.unpaid} onChange={(v) => set("unpaid", v)} /></div>
                 </div>
               )}

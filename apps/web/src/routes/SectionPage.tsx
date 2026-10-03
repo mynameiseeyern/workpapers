@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LoadedLedger, StoredRow } from "../data/ledger";
 import { EvidencePreview, type PreviewFile } from "../components/EvidencePreview";
 import { blankDraft, deleteRow, draftFrom, fileLabel, fileUrl, saveDraft, SHARED, type Draft } from "../data/rowsApi";
+import { sectionById } from "../data/sections";
 import { usedBefore } from "../data/suggestions";
 import { EntryForm } from "./EntryForm";
 import { RecordsView, SectionTotals } from "./Figures";
@@ -21,6 +22,18 @@ function explain(x: unknown, fallback: string): string {
   if (parts.length) return `${fallback}. ${parts.join("; ")}`;
   return (x as Error)?.message || fallback;
 }
+
+/** A kind word after each new record. They take turns, so the same one never comes twice in a row. */
+const CHEERS = [
+  "Nice one, that's in.",
+  "Added. One less thing for tax time.",
+  "Done. Future you says thanks.",
+  "Got it. The books are looking good.",
+  "Recorded. Keep them coming.",
+  "Sorted. That's another one down.",
+];
+let turn = 0;
+const cheer = () => CHEERS[turn++ % CHEERS.length]!;
 
 /** One schedule: totals, the entry form, and its records with edit and delete (with undo). */
 export function SectionPage({ e, loaded, section, scope, person, years }: Props) {
@@ -55,13 +68,23 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
   // On the Household tab a new record in a schedule that can be shared starts as shared, split evenly; on a person's tab it's theirs.
   const defaultOwner = person !== "Household" ? person : SCHEDULES[section]?.shared ? SHARED : e.people[0]!;
 
+  // "3 records in Interest this year", counting the one just added. Left out when the new record's date falls in another year.
+  const tally = (d: Draft): string | undefined => {
+    const name = sectionById(section)?.name ?? "this schedule";
+    const fyOfDate = Number(d.date.slice(5, 7)) >= 7 ? Number(d.date.slice(0, 4)) + 1 : Number(d.date.slice(0, 4));
+    if (section === "s05" || fyOfDate !== e.fy) return undefined;
+    const n = e.rowsIn(section).length + 1;
+    return n === 1 ? `First one in ${name} this year.` : `${n} records in ${name} this year.`;
+  };
+
   const save = async (d: Draft, removed: string[]) => {
     setSaving(true); setError("");
     try {
       const saved = await saveDraft(d, loaded.peopleIds, removed);
       await refresh();
       mark(saved.id);
-      toast(d.id ? "Changes saved" : "Record added", { variant: "success", timeout: 3000 });
+      if (d.id) toast("Changes saved", { variant: "success", timeout: 3000 });
+      else toast(cheer(), { description: tally(d), variant: "success", timeout: 3500 });
       // keep the form open for the next entry when adding; close after an edit
       setDraft(d.id ? null : { ...blankDraft(section, d.owner, d.date), direction: d.direction, use: d.use, bizCategory: d.bizCategory, category: d.category });
     } catch (x) {
@@ -77,7 +100,7 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
       const id = toast("Record deleted", {
         description: hadFiles ? "Undo brings the record back; its attached files are gone." : undefined,
         timeout: 8000,
-        actionProps: { children: "Undo", variant: "tertiary", onPress: async () => { toast.close(id); await undo(); await refresh(); } },
+        actionProps: { children: "Undo", variant: "tertiary", onPress: async () => { toast.close(id); await undo(); await refresh(); mark(r.id); } },
       });
     } catch (x) {
       setError(explain(x, "Couldn't delete"));

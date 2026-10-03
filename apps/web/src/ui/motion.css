@@ -73,6 +73,27 @@
   }
 }
 
+/* The preview leaves the way it came, quicker than it arrived. */
+.enter-panel[data-leaving] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition-duration: 160ms;
+  transition-timing-function: var(--wp-ease-out);
+  pointer-events: none;
+}
+@media (min-width: 80rem) {
+  .enter-panel[data-leaving] { transform: translateX(24px); }
+}
+
+/* A status that has just changed for the better ("not lodged" to "lodged"): it settles into place from its left edge. */
+.enter-pop {
+  transform-origin: left center;
+  transition: opacity 200ms var(--wp-ease-out), transform 200ms var(--wp-ease-out);
+}
+@starting-style {
+  .enter-pop { opacity: 0; transform: scale(0.95); }
+}
+
 /* A record that was just added or changed: marked for a moment, then it settles. */
 @keyframes row-flash {
   from { background-color: var(--accent-soft); }
@@ -83,9 +104,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .button, .toggle-button { transition: background-color 120ms ease, box-shadow 120ms ease; }
-  .enter, .enter-panel { transition: opacity 200ms ease; }
+  .enter, .enter-panel, .enter-pop { transition: opacity 200ms ease; }
+  .enter-panel[data-leaving] { transform: none; }
   @starting-style {
-    .enter, .enter-panel { opacity: 0; transform: none; }
+    .enter, .enter-panel, .enter-pop { opacity: 0; transform: none; }
     .enter-fade { opacity: 0; filter: none; }
   }
 }
