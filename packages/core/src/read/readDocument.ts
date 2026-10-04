@@ -52,22 +52,29 @@ const iso = (y: number, m: number, d: number): string | undefined => {
   if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return undefined;
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 };
-/** The first date in a piece of text. Day comes first, the Australian way. */
-function dateIn(text: string): string | undefined {
+/** The first date in a piece of text, and where it ends. Day comes first, the Australian way. */
+function firstDate(text: string): { date: string; end: number } | undefined {
   const tries: [RegExp, (m: RegExpMatchArray) => string | undefined][] = [
     [/\b(\d{4})-(\d{2})-(\d{2})\b/, (m) => iso(+m[1]!, +m[2]!, +m[3]!)],
     [/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/, (m) => iso(+m[3]!, +m[2]!, +m[1]!)],
     [/\b(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})\.?,?[\s-]+(\d{4})\b/, (m) => iso(+m[3]!, MONTHS.indexOf(m[2]!.slice(0, 3).toLowerCase()) + 1, +m[1]!)],
     [/\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/, (m) => iso(+m[3]!, MONTHS.indexOf(m[1]!.slice(0, 3).toLowerCase()) + 1, +m[2]!)],
   ];
-  let best: { at: number; date: string } | undefined;
+  let best: { at: number; date: string; end: number } | undefined;
   for (const [re, make] of tries) {
     const m = text.match(re);
     if (!m) continue;
     const date = make(m);
-    if (date && (!best || (m.index ?? 0) < best.at)) best = { at: m.index ?? 0, date };
+    if (date && (!best || (m.index ?? 0) < best.at)) best = { at: m.index ?? 0, date, end: (m.index ?? 0) + m[0].length };
   }
-  return best?.date;
+  return best && { date: best.date, end: best.end };
+}
+const dateIn = (text: string): string | undefined => firstDate(text)?.date;
+/** Every date on a line, left to right. */
+function datesIn(text: string): string[] {
+  const out: string[] = [];
+  for (let rest = text, d = firstDate(rest); d; rest = rest.slice(d.end), d = firstDate(rest)) out.push(d.date);
+  return out;
 }
 const DATE_LABELS = [
   /payment date|date paid|paid on|date of payment/i,
@@ -119,7 +126,12 @@ const NOT_FROM: Partial<Record<SectionId, Record<string, RegExp>>> = {
   },
 };
 /** Other money headings that show up as table columns, so a row of figures can be lined up with its headings. */
-const OTHER_COLUMNS = [/gross payment/i, /net payment/i, /total payment/i, /net pay/i, /\bamount\b/i, /\btotal\b/i, /\bbalance\b/i];
+const OTHER_COLUMNS = [/gross payment/i, /net payment/i, /total payment/i, /net (pay|income)/i, /(pre|post|before|after)[- ]?tax (earnings|deductions?)/i,
+  /\bdeductions?\b/i, /\bnet\b/i, /\bamount\b/i, /\btotal\b/i, /\bbalance\b/i];
+/** A running total for the year. A payslip is read for the pay it covers, so each payslip can be its own record and they add up. */
+const YTD = /\b(ytd|y\.t\.d\.?|year[- ]to[- ]date)\b/i;
+/** A heading row whose last column is the year to date ("Description  This pay  Year to date"). */
+const YTD_LAST_COLUMN = /\S.*\b(ytd|y\.t\.d\.?|year[- ]to[- ]date)\s*$/i;
 
 const TOTAL_LABELS = [
   /amount due|balance due|total due|amount payable|total payable|amount owing|please pay/i,
@@ -136,15 +148,29 @@ const TOTAL_WITH_GST_WORD = /total[^$\d]*\b(inc|incl|including)\b[^$\d]*gst/i;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const fromLabel = (l: string) => new RegExp(escape(l.replace(/\s*\(.*?\)\s*/g, " ").trim()).replace(/\s+/g, "\\s+"), "i");
 
-/** The amount printed beside a label: after it on the same line (the right-most one, which on a payslip is year to date), else alone on the next line. */
-function beside(lines: string[], i: number, label: RegExp): Hit | undefined {
+/** How a payslip is read: for this pay, never the year to date. */
+interface Payslip { ytdLastColumn: boolean }
+
+/**
+ * The amount printed beside a label: after it on the same line (the right-most one), else alone on the next line.
+ * On a payslip the year-to-date figure is passed over: a label that says "YTD", anything after "YTD" on the line,
+ * and the last figure on a line when the last column is the year to date.
+ */
+function beside(lines: string[], i: number, label: RegExp, payslip?: Payslip): Hit | undefined {
   const line = lines[i]!, m = line.match(label);
   if (!m) return undefined;
-  const end = (m.index ?? 0) + m[0].length;
-  const after = amountsIn(line).filter((a) => a.at >= end);
+  const start = m.index ?? 0, end = start + m[0].length;
+  let after = amountsIn(line).filter((a) => a.at >= end);
+  if (payslip) {
+    if (YTD.test(line.slice(0, start)) || YTD.test(m[0])) return undefined;
+    const cut = line.slice(end).search(YTD);
+    if (cut >= 0) { after = after.filter((a) => a.at < end + cut); if (!after.length) return undefined; }
+    else if (payslip.ytdLastColumn && after.length >= 2) after = after.slice(0, -1);
+  }
   if (after.length) return after[after.length - 1];
+  // On the line below, only when it holds that one figure: a row of several belongs to a row of headings, read as a table.
   const next = lines[i + 1];
-  if (next && !/[A-Za-z]{3,}/.test(next.replace(/aud|nzd|usd/gi, ""))) { const a = amountsIn(next); if (a.length) return a[a.length - 1]; }
+  if (next && !/[A-Za-z]{3,}/.test(next.replace(/aud|nzd|usd/gi, ""))) { const a = amountsIn(next); if (a.length === 1) return a[0]; }
   return undefined;
 }
 
@@ -157,6 +183,8 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
   // ----- figures for the return schedules -----
   if (g) {
     const money = g.fields.filter((f) => f.t === "money");
+    const payslip: Payslip | undefined = opts.section === "i01"
+      ? { ytdLastColumn: lines.some((l) => YTD_LAST_COLUMN.test(l) && !amountsIn(l).length) } : undefined;
     const labelsOf = (k: string, l: string) => [...(LABELS[opts.section]?.[k] ?? []), fromLabel(l)];
     const take = (k: string, cents: Cents, line: string) => { if (!(k in out.details)) { out.details[k] = cents; out.found.push({ field: k, cents, line }); } };
 
@@ -164,16 +192,27 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
     for (let i = 0; i < lines.length - 1; i++) {
       const head = lines[i]!;
       if (amountsIn(head).length) continue;
-      const cols: { at: number; len: number; k?: string }[] = [];
-      const claim = (re: RegExp, k?: string) => {
-        const m = head.match(re);
-        if (!m) return;
-        const at = m.index ?? 0, len = m[0].length;
-        if (!cols.some((c) => at < c.at + c.len && c.at < at + len)) cols.push({ at, len, k });
+      // Every wording that could be a column, for the boxes and for columns that aren't boxes.
+      interface Col { at: number; len: number; k?: string; rank: number }
+      const found: Col[] = [];
+      const offer = (re: RegExp, k?: string, rank = 0) => {
+        for (const m of head.matchAll(new RegExp(re.source, "gi"))) {
+          const at = m.index ?? 0;
+          if (!m[0].length) continue;
+          // on a payslip a "YTD ..." column is still a column, but never one of the boxes
+          const running = !!payslip && (YTD.test(head.slice(Math.max(0, at - 16), at)) || YTD.test(m[0]));
+          found.push({ at, len: m[0].length, k: running ? undefined : k, rank });
+        }
       };
-      for (const f of money) { const first = labelsOf(f.k, f.l)[0]; if (first) claim(first, f.k); }
+      for (const f of money) labelsOf(f.k, f.l).forEach((re, rank) => offer(re, f.k, rank));
+      for (const re of OTHER_COLUMNS) offer(re);
+      // The longest wording wins its stretch of the heading: "Post tax earnings" is one column, not a "Tax" column.
+      found.sort((a, b) => b.len - a.len || a.rank - b.rank || (a.k ? 0 : 1) - (b.k ? 0 : 1));
+      const cols: Col[] = [];
+      for (const c of found) if (!cols.some((x) => c.at < x.at + x.len && x.at < c.at + c.len)) cols.push(c);
+      // One column per box, the one with its most exact wording: "Taxable income" is gross payments, a plain "Gross" beside it is not.
+      for (const f of money) cols.filter((c) => c.k === f.k).sort((a, b) => a.rank - b.rank).slice(1).forEach((c) => { c.k = undefined; });
       if (cols.filter((c) => c.k).length < 2) continue;
-      for (const re of OTHER_COLUMNS) claim(re);
       cols.sort((a, b) => a.at - b.at);
       for (const j of [i + 1, i + 2]) {
         const row = lines[j];
@@ -193,11 +232,17 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
       search: for (const label of labelsOf(f.k, f.l)) {
         for (let i = 0; i < lines.length; i++) {
           if (skip?.test(lines[i]!)) continue;
-          const hit = beside(lines, i, label);
+          const hit = beside(lines, i, label, payslip);
           if (hit) { take(f.k, hit.cents, lines[i]!); break search; }
         }
       }
     }
+  }
+
+  // Tax taken out of a pay is always less than the pay. Anything else is a misreading, and an empty box is better than a wrong one.
+  if (opts.section === "i01" && out.details["withheld"] != null && out.details["gross"] != null && out.details["withheld"] >= out.details["gross"]) {
+    delete out.details["withheld"];
+    out.found = out.found.filter((f) => f.field !== "withheld");
   }
 
   // ----- the total and the GST, for invoices and receipts -----
@@ -237,7 +282,13 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
     for (let i = 0; i < lines.length; i++) {
       const m = lines[i]!.match(label);
       if (!m) continue;
-      const date = dateIn(lines[i]!.slice((m.index ?? 0) + m[0].length)) ?? (lines[i + 1] ? dateIn(lines[i + 1]!) : undefined);
+      let date = dateIn(lines[i]!.slice((m.index ?? 0) + m[0].length));
+      if (!date && lines[i + 1]) {
+        // A row of headings with the dates on the row below: count along to this heading's date. A "period" before it holds two.
+        const before = lines[i]!.slice(0, m.index ?? 0), below = datesIn(lines[i + 1]!);
+        const along = (before.match(/\bperiod\b/gi)?.length ?? 0) * 2 + (before.match(/\b(date|from|start(s|ing)?|end(s|ing)?)\b/gi)?.length ?? 0);
+        date = below[Math.min(along, below.length - 1)];
+      }
       if (date) { out.date = date; out.found.push({ field: "date", text: date, line: lines[i]! }); break search; }
     }
   }
@@ -254,7 +305,7 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
       const line = lines[i]!;
       if (!/\b(pty\.?\s*ltd\.?|limited|ltd\.?|incorporated|inc\.?)(\s|$|,)/i.test(line)) continue;
       if (/bill(ed)? to|invoice to|ship to|sold to|customer|attention|attn/i.test(line) || /bill(ed)? to|invoice to|ship to|sold to|customer/i.test(lines[i - 1] ?? "")) continue;
-      const name = line.replace(/\babn\b.*$/i, "").replace(/[|•·].*$/, "").trim();
+      const name = line.replace(/\babn\b.*$/i, "").replace(/[|•·].*$/, "").replace(/\s+\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\s*$/, "").trim();
       if (name.length >= 3 && name.length <= 70 && !amountsIn(name).length) { out.party = name; out.found.push({ field: "party", text: name, line }); break; }
     }
   }

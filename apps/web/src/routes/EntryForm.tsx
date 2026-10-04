@@ -319,7 +319,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                       {read.filled.length > 0
                         ? (read.how === "ocr" ? "This was read from a picture, so check every digit against the document before adding." : "Check each one against the document before adding.")
                         : !read.trouble && "The boxes can still be filled in by hand."}
-                      {read.filled.length > 0 && d.section === "i01" && " On a payslip the year-to-date column is used."}
+                      {read.filled.length > 0 && d.section === "i01" && " On a payslip the figures for that pay are used, not the year to date."}
                     </Alert.Description>
                   </Alert.Content>
                 </Alert>
