@@ -2,6 +2,7 @@ import { Alert, Button, Card, Checkbox, ComboBox, Description, FieldError, Input
 import { BIZ_CATS, formatMoney, readFigures, SCHEDULES, toCents, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
+import { SplitSlider } from "../ui/fields";
 import { useSwapClass } from "../ui/motion";
 import { fileLabel, SHARED, validate, type Draft } from "../data/rowsApi";
 
@@ -199,8 +200,8 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
           <div className="grid gap-3 sm:grid-cols-3">
             <Choice label={d.section === "s05" ? "ABN holder" : "Whose"} value={d.owner} options={owners} onChange={(v) => set("owner", v)} />
             {d.owner === SHARED && (
-              <Text label={`${people[0]}'s share %`} value={d.sharePct} onChange={(v) => set("sharePct", v)} error={errors.sharePct}
-                inputMode="decimal" description={`${people[1]} gets the rest`} className={`w-full ${arrive}`} />
+              <SplitSlider people={[people[0] ?? "", people[1] ?? ""]} value={d.sharePct.trim() ? Number(d.sharePct) : 50}
+                onChange={(v) => set("sharePct", String(v))} className={`w-full ${arrive}`} />
             )}
             <Text label={g?.dateLabel ?? (d.section === "s05" ? "Invoice date" : d.section === "s07a" ? "Week starting" : "Date")}
               type="date" value={d.date} onChange={(v) => { if (!d.id && d.paid === d.date) set("paid", v); set("date", v); }} error={errors.date} required />

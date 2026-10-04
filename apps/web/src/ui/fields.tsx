@@ -1,6 +1,6 @@
 import {
   Calendar, Checkbox, ComboBox, DateField, DatePicker, Description, FieldError, Fieldset, Input, InputGroup, Label, ListBox,
-  Select, Switch, TextArea, TextField, ToggleButton, ToggleButtonGroup,
+  Select, Slider, Switch, TextArea, TextField, ToggleButton, ToggleButtonGroup,
 } from "@heroui/react";
 import { parseDate, type CalendarDate } from "@internationalized/date";
 import { useId, type ReactNode } from "react";
@@ -148,6 +148,23 @@ export function Segmented(p: { label: string; hideLabel?: boolean; value: string
         {p.options.map((o) => <ToggleButton key={idOf(o)} id={idOf(o)}>{labelOf(o)}</ToggleButton>)}
       </ToggleButtonGroup>
     </div>
+  );
+}
+
+/**
+ * How something shared is split between two people: slide towards whoever has more. Starts in the middle (50/50).
+ * `value` is the first person's percentage; the second person gets the rest.
+ */
+export function SplitSlider(p: { label?: string; people: [string, string]; value: number; onChange: (v: number) => void; className?: string }) {
+  const first = Number.isFinite(p.value) ? Math.max(0, Math.min(100, p.value)) : 50;
+  const pct = (n: number) => `${Math.round(n * 100) / 100}%`;
+  return (
+    <Slider className={p.className ?? "w-full"} minValue={0} maxValue={100} step={1} value={Math.round(first)}
+      onChange={(v) => p.onChange(Array.isArray(v) ? v[0] ?? 50 : v)}>
+      <Label>{p.label ?? "Split"}</Label>
+      <Slider.Output>{() => `${p.people[0]} ${pct(first)} · ${p.people[1]} ${pct(100 - first)}`}</Slider.Output>
+      <Slider.Track><Slider.Fill /><Slider.Thumb /></Slider.Track>
+    </Slider>
   );
 }
 

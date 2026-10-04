@@ -2,7 +2,7 @@ import { Button, Typography } from "@heroui/react";
 import { useState, type ReactNode } from "react";
 import {
   AutoSaveStatus, Choice, Confirm, DataTable, DateBox, Empty, FieldGroup, FigureList, Hint, Money, MoneyBox, NavList, NoteBox, Notice,
-  NumberBox, PageHeader, Pill, RowMenu, SaveStatus, Section, Segmented, Stat, StatRow, Suggest, TextBox, Tick, Toggle, type Column,
+  NumberBox, PageHeader, Pill, RowMenu, SaveStatus, Section, Segmented, SplitSlider, Stat, StatRow, Suggest, TextBox, Tick, Toggle, type Column,
 } from "../ui";
 
 /** One made-up dividend, for showing the table. None of this is real data. */
@@ -47,6 +47,7 @@ export function Components() {
   const [applies, setApplies] = useState("yes");
   const [tick, setTick] = useState(true);
   const [on, setOn] = useState(true);
+  const [split, setSplit] = useState(50);
   const [nav, setNav] = useState("i11");
   const [dirty, setDirty] = useState(true);
   const [formShown, setFormShown] = useState(0);
@@ -126,6 +127,7 @@ export function Components() {
           <Tick label="I have it on paper or elsewhere" checked={tick} onChange={setTick} />
           <Toggle label="Registered for GST" on={on} onChange={setOn} />
         </div>
+        <SplitSlider people={["Person A", "Person B"]} value={split} onChange={setSplit} className="max-w-sm" />
       </Block>
 
       <Block title="Figures" note="One figure leads; the rest support it. Worked lists keep detail quiet and totals bold.">
