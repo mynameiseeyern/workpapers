@@ -60,6 +60,9 @@ export function ReturnCard({ e, o }: { e: Engine; o: string }) {
           <p className="mt-2 text-xs text-muted">Business loss of {m(f.businessLoss)} is deferred unless a non-commercial loss test is met.</p>
         )}
         {f.ccRoom < 0 && <p className="mt-2 text-xs text-danger">Concessional super is {m(-f.ccRoom)} over the cap.</p>}
+        {f.ccRoom >= 0 && f.concessional > 0 && (
+          <p className="mt-2 text-xs text-muted">Super towards the cap so far: {m(f.concessional)} of {m(f.ccCap + f.ccCarry)}.</p>
+        )}
       </Card.Content>
     </Card>
   );
@@ -141,7 +144,7 @@ function figuresOf(r: Row, share = 1): string {
   const g = SCHEDULES[r.section];
   if (g) {
     const d = (r.details ?? {}) as Record<string, unknown>;
-    return g.fields.filter((f) => (f.t === "money" || f.t === "num") && Number(d[f.k]))
+    return g.fields.filter((f) => !f.aside && (f.t === "money" || f.t === "num") && Number(d[f.k]))
       .map((f) => `${f.l} ${f.t === "money" ? m(part(Number(d[f.k]))) : Math.round(Number(d[f.k]) * share * 100) / 100}`).join(" · ");
   }
   if (r.section === "s07a") return `${r.hours ?? 0} h · ${r.use === "business" ? "business" : "employment"}`;
@@ -189,7 +192,7 @@ export function SectionTotals({ e, section, scope }: { e: Engine; section: strin
   } else if (SCHEDULES[section]) {
     const g = SCHEDULES[section]!, t = e.scheduleTotals(section as SectionId, scope);
     stats.push({ label: "Total", value: m(e.scheduleMain(section as SectionId, scope)) });
-    for (const f of g.fields.filter((x) => x.t === "money" && !g.tax.income?.includes(x.k) && x.k !== g.tax.ded)) {
+    for (const f of g.fields.filter((x) => x.t === "money" && !x.aside && !g.tax.income?.includes(x.k) && x.k !== g.tax.ded)) {
       const v = Number(t.values[f.k] ?? 0);
       if (v) stats.push({ label: f.l, value: m(v) });
     }

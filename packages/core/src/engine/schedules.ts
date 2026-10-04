@@ -11,6 +11,8 @@ export interface Field {
   k: string; l: string; t: FieldType; req?: boolean; opts?: string[];
   /** A line of help shown under the box. Words only: it changes nothing in the sums. */
   hint?: string;
+  /** Not a figure on the tax return: kept out of the main form, the page totals and the record list. Where it shows only; the sums still use it. */
+  aside?: boolean;
 }
 
 export interface CalcCtx { carRate: number }
@@ -51,13 +53,14 @@ export const CAR_CAP_KM = 5000;
 export const SCHEDULES: Record<string, Schedule> = {
   i01: {
     id: "i01", shared: false, dateLabel: "Statement date", doc: "income statement",
-    sub: "One line per employer from the income statement in myGov, or one line per payslip as the year goes. Not both for the same job: the income statement already counts every payslip. The ATO pre-fills these; the job here is to check them and keep the figures the income tests need.",
+    sub: "One line per payslip as the year goes, or one line per employer from the income statement in myGov. Not both for the same job: the income statement already counts every payslip.",
     fields: [
       { k: "party", l: "Employer", t: "text", req: true }, { k: "gross", l: "Gross payments", t: "money", req: true },
       { k: "withheld", l: "Tax withheld", t: "money" }, { k: "allow", l: "Allowances (item 2)", t: "money" },
       { k: "rfb", l: "Reportable fringe benefits", t: "money" }, { k: "resc", l: "Reportable employer super", t: "money",
         hint: "Includes any super you salary sacrificed. Gross payments already leaves it out." },
-      { k: "sg", l: "Employer super (SG)", t: "money" },
+      { k: "sg", l: "Employer super (SG)", t: "money", aside: true,
+        hint: "Only used to check your super cap. A payslip fills it in for you." },
     ],
     tax: { income: ["gross", "allow"], withheld: ["withheld"], rfb: ["rfb"], resc: ["resc"], sg: ["sg"] },
   },

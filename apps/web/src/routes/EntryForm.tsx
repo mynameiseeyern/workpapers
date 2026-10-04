@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Checkbox, ComboBox, Description, FieldError, Input, Label, ListBox, Select, Spinner, TextArea, TextField } from "@heroui/react";
+import { Alert, Button, Card, Checkbox, ComboBox, Description, Disclosure, FieldError, Input, Label, ListBox, Select, Spinner, TextArea, TextField } from "@heroui/react";
 import { BIZ_CATS, formatMoney, readFigures, SCHEDULES, toCents, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
@@ -91,6 +91,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
   const [removed, setRemoved] = useState<string[]>([]);
   const gstTouched = useRef(!!draft.gst);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [showAside, setShowAside] = useState(false);
   const arrive = useSwapClass();   // boxes that appear after a choice fade in; nothing fades just because the form opened
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
 
@@ -195,6 +196,11 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
     );
   };
 
+  // Figures that aren't on the tax return sit folded away under the main boxes, with what's in them shown on the fold.
+  const aside = g?.fields.filter((f) => f.aside) ?? [];
+  const asideFilled = aside.filter((f) => String(d.details[f.k] ?? "").trim())
+    .map((f) => `${f.l} ${f.t === "money" && Number.isFinite(Number(String(d.details[f.k]).replace(/[$,\s]/g, ""))) ? formatMoney(toCents(Number(String(d.details[f.k]).replace(/[$,\s]/g, "")))) : String(d.details[f.k])}`).join(" · ");
+
   return (
     <Card className="enter">
       <Card.Header>
@@ -227,7 +233,21 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
               type="date" value={d.date} onChange={(v) => { if (!d.id && d.paid === d.date) set("paid", v); set("date", v); }} error={errors.date} required />
           </div>
 
-          {g && <div className="grid gap-3 sm:grid-cols-3">{g.fields.map(field)}</div>}
+          {g && <div className="grid gap-3 sm:grid-cols-3">{g.fields.filter((f) => !f.aside).map(field)}</div>}
+
+          {aside.length > 0 && (
+            <Disclosure className="-mx-2" isExpanded={showAside || aside.some((f) => errors[`details.${f.k}`])} onExpandedChange={setShowAside}>
+              <Disclosure.Heading>
+                <Disclosure.Trigger className="flex w-full items-center justify-start gap-2 px-2 text-left text-sm text-muted">
+                  <Disclosure.Indicator className="ms-0" />
+                  <span>Not on the tax return{asideFilled ? <span className="tabular-nums"> · {asideFilled}</span> : ""}</span>
+                </Disclosure.Trigger>
+              </Disclosure.Heading>
+              <Disclosure.Content>
+                <Disclosure.Body className="grid gap-3 sm:grid-cols-3">{aside.map(field)}</Disclosure.Body>
+              </Disclosure.Content>
+            </Disclosure>
+          )}
 
           {d.section === "s07a" && (
             <div className="grid gap-3 sm:grid-cols-3">
