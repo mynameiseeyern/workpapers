@@ -185,7 +185,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
     return (
       <Text key={f.k} label={f.l} value={String(v ?? "")} onChange={(x) => setDetail(f.k, x)} error={errors[k]} required={f.req}
         type={f.t === "date" ? "date" : "text"} money={f.t === "money"} inputMode={f.t === "num" ? "decimal" : undefined}
-        description={f.t === "money" ? split(String(v ?? "")) : undefined} />
+        description={(f.t === "money" ? split(String(v ?? "")) : undefined) ?? f.hint} />
     );
   };
 

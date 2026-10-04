@@ -7,7 +7,11 @@ import type { SectionId } from "../model";
  * money fields in cents, num fields as plain numbers, checks as booleans, the rest as strings.
  */
 export type FieldType = "text" | "money" | "num" | "sel" | "check" | "date";
-export interface Field { k: string; l: string; t: FieldType; req?: boolean; opts?: string[] }
+export interface Field {
+  k: string; l: string; t: FieldType; req?: boolean; opts?: string[];
+  /** A line of help shown under the box. Words only: it changes nothing in the sums. */
+  hint?: string;
+}
 
 export interface CalcCtx { carRate: number }
 type Details = Record<string, unknown>;
@@ -51,7 +55,8 @@ export const SCHEDULES: Record<string, Schedule> = {
     fields: [
       { k: "party", l: "Employer", t: "text", req: true }, { k: "gross", l: "Gross payments", t: "money", req: true },
       { k: "withheld", l: "Tax withheld", t: "money" }, { k: "allow", l: "Allowances (item 2)", t: "money" },
-      { k: "rfb", l: "Reportable fringe benefits", t: "money" }, { k: "resc", l: "Reportable employer super", t: "money" },
+      { k: "rfb", l: "Reportable fringe benefits", t: "money" }, { k: "resc", l: "Reportable employer super", t: "money",
+        hint: "Includes any super you salary sacrificed. Gross payments already leaves it out." },
       { k: "sg", l: "Employer super (SG)", t: "money" },
     ],
     tax: { income: ["gross", "allow"], withheld: ["withheld"], rfb: ["rfb"], resc: ["resc"], sg: ["sg"] },

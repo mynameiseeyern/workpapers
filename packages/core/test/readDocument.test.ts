@@ -101,6 +101,53 @@ describe("readFigures", () => {
     expect(r.date).toBe("2026-06-30");
   });
 
+  it("puts salary-sacrificed super with reportable employer super, not with the employer's own super", () => {
+    const text = `
+      Example Employer Pty Ltd
+      Pay date 30/06/2026
+      Description                  This pay      Year to date
+      Gross pay                    3,326.92      86,500.00
+      Salary sacrifice - super      -200.00      -5,200.00
+      Taxable gross                3,126.92      81,300.00
+      PAYG tax                       710.00      18,460.00
+      Superannuation guarantee       382.60       9,947.50
+      Net pay                      2,416.92      62,840.00`;
+    const r = readFigures(text, { section: "i01" });
+    expect(r.details.resc).toBe(520000);
+    expect(r.details.sg).toBe(994750);
+    expect(r.details.gross).toBe(8130000);      // the taxable figure: what the income statement will show
+    expect(r.details.withheld).toBe(1846000);
+  });
+
+  it("reads salary sacrifice however the payslip words it", () => {
+    const read = (line: string) => readFigures(`Example Employer Pty Ltd\n${line}\nSuperannuation 9,947.50`, { section: "i01" }).details;
+    for (const line of ["Salary sacrifice 5,200.00", "Super salary sacrifice $5,200.00", "Sal Sac Super 5,200.00",
+      "Pre-tax super contribution 5,200.00", "Salary sacrificed superannuation (5,200.00)"]) {
+      expect(read(line).resc, line).toBe(520000);
+      expect(read(line).sg, line).toBe(994750);
+    }
+  });
+
+  it("doesn't take a salary-sacrificed car, or after-tax super, as reportable super", () => {
+    const read = (line: string) => readFigures(`Example Employer Pty Ltd\n${line}\nTax 18,460.00\nSuperannuation 9,947.50`, { section: "i01" }).details;
+    for (const line of ["Salary sacrifice - novated lease 7,800.00", "Salary sacrifice car 7,800.00", "Post-tax super contribution 2,600.00"]) {
+      expect(read(line).resc, line).toBeUndefined();
+      expect(read(line).sg, line).toBe(994750);
+      expect(read(line).withheld, line).toBe(1846000);
+    }
+  });
+
+  it("keeps reportable employer super out of the employer super box on an income statement", () => {
+    const text = `
+      Example Employer Pty Ltd
+      Gross payments   $81,300.00
+      Tax withheld   $18,460.00
+      Reportable employer superannuation contributions   $5,200.00`;
+    const r = readFigures(text, { section: "i01" });
+    expect(r.details.resc).toBe(520000);
+    expect(r.details.sg).toBeUndefined();
+  });
+
   it("reads a private health insurance statement", () => {
     const text = `
       Example Health Fund Limited

@@ -81,11 +81,15 @@ const DATE_LABELS = [
 /** Words printed beside each figure, most specific first. Anything not listed falls back to the box's own label. */
 const LABELS: Partial<Record<SectionId, Record<string, RegExp[]>>> = {
   i01: {
-    gross: [/gross payments?/i, /total gross/i, /gross (pay|earnings|income|wages|salary)/i, /\bgross\b/i],
+    // A payslip that prints a taxable figure has already taken salary sacrifice off, as the income statement does.
+    gross: [/taxable (gross|earnings|income|wages|salary|pay)\b/i, /gross payments?/i, /total gross/i, /gross (pay|earnings|income|wages|salary)/i, /\bgross\b/i],
     withheld: [/total tax withheld/i, /tax withheld/i, /payg( tax| withholding)?/i, /income tax/i, /\btax\b(?! invoice| file|able)/i],
     allow: [/allowances?/i],
     rfb: [/reportable fringe benefits?( amount)?/i],
-    resc: [/reportable employer super(annuation)?( contributions?)?/i, /\bresc\b/i],
+    // Salary-sacrificed super is reportable employer super: on a payslip it's the "salary sacrifice" line.
+    resc: [/reportable employer super(annuation)?( contributions?)?/i, /\bresc\b/i,
+      /salary sacrific\w*[^\d$]*super\w*/i, /super\w*[^\d$]*salary sacrific\w*/i, /sal\.? sac\w*[^\d$]*super\w*/i,
+      /pre[- ]?tax super\w*( contributions?)?/i, /super\w*[^\d$]*pre[- ]?tax/i, /salary sacrific\w*/i, /\bsal\.? sac\b\.?/i],
     sg: [/super(annuation)? guarantee/i, /employer super(annuation)?/i, /\bsgc?\b/i, /super(annuation)?/i],
   },
   i10: {
@@ -102,6 +106,17 @@ const LABELS: Partial<Record<SectionId, Record<string, RegExp[]>>> = {
   i18: { cost: [/cost base/i, /total cost/i, /purchase (price|cost)/i], proceeds: [/(net |gross |sale )?proceeds/i, /consideration/i, /sale price/i] },
   i20: { gross: [/gross( amount| income| payment)?/i], ftax: [/foreign tax( paid)?/i, /withholding tax/i] },
   h01: { premiums: [/premiums? (eligible|paid)/i, /your premiums?/i, /total premiums?/i], rebate: [/rebate received/i, /government rebate/i, /\brebate\b/i] },
+};
+/**
+ * Lines a box must not read from: where one label sits inside another ("employer super" inside "reportable employer
+ * super"), or where the words mean something else (a salary-sacrificed car isn't super).
+ */
+const NOT_FROM: Partial<Record<SectionId, Record<string, RegExp>>> = {
+  i01: {
+    withheld: /(pre|post|before|after)[- ]?tax/i,
+    resc: /novated|\blease|vehicle|\bcar\b|laptop|phone|device|meal|\bfbt\b|fringe|(post|after)[- ]?tax/i,
+    sg: /reportable|\bresc\b|salary sacrific|\bsal\.? sac|(pre|post|before|after)[- ]?tax|personal|voluntary|additional/i,
+  },
 };
 /** Other money headings that show up as table columns, so a row of figures can be lined up with its headings. */
 const OTHER_COLUMNS = [/gross payment/i, /net payment/i, /total payment/i, /net pay/i, /\bamount\b/i, /\btotal\b/i, /\bbalance\b/i];
@@ -174,8 +189,10 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
     for (const f of money) {
       if (f.k in out.details) continue;
       if (f.k === "amount") continue;   // a bare "Amount" box takes the document's total, below
+      const skip = NOT_FROM[opts.section]?.[f.k];
       search: for (const label of labelsOf(f.k, f.l)) {
         for (let i = 0; i < lines.length; i++) {
+          if (skip?.test(lines[i]!)) continue;
           const hit = beside(lines, i, label);
           if (hit) { take(f.k, hit.cents, lines[i]!); break search; }
         }
