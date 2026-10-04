@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
 import { SplitSlider } from "../ui/fields";
 import { useSwapClass } from "../ui/motion";
+import type { DocumentText } from "../data/documentText";
 import { fileLabel, SHARED, validate, type Draft } from "../data/rowsApi";
 
 interface Props {
@@ -18,6 +19,10 @@ interface Props {
   usedBefore?: (field: string, direction?: "income" | "expense") => string[];
   /** Look at an attached file: one just picked (a File) or a saved one (its stored name). */
   onView?: (f: File | string) => void;
+  /** The text of a document, when the page keeps it (it may have been read already while the one before was being checked). */
+  textOf?: (file: File, say: (status: string) => void) => Promise<DocumentText>;
+  /** Working through several documents, one record each: which one this is, and how to pass over it. */
+  queue?: { at: number; of: number; onSkip: () => void };
 }
 
 /** Which owners a section allows: shared rows only where a split makes sense. */
@@ -80,7 +85,7 @@ function Tick(p: { label: string; checked: boolean; onChange: (v: boolean) => vo
 }
 
 /** Add or edit one record. The fields follow the section; shared rows carry a split. */
-export function EntryForm({ draft, people, years, gstRegistered, saving, onSave, onCancel, onView, usedBefore }: Props) {
+export function EntryForm({ draft, people, years, gstRegistered, saving, onSave, onCancel, onView, usedBefore, textOf, queue }: Props) {
   const [d, setD] = useState<Draft>(draft);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [removed, setRemoved] = useState<string[]>([]);
@@ -99,7 +104,8 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
     try {
       const { canRead, documentText } = await import("../data/documentText");
       if (!canRead(file)) return setRead({ file, filled: [], how: "text", trouble: "This kind of file can't be read. A PDF, JPG or PNG can." });
-      const doc = await documentText(file, setReading);
+      setReading(`Reading ${file.name}…`);
+      const doc = await (textOf ? textOf(file, setReading) : documentText(file, setReading));
       const now = latest.current, sched = SCHEDULES[now.section];
       const r = readFigures(doc.text, { section: now.section, known: sched ? usedBefore?.("details.party") ?? [] : usedBefore?.("party", now.direction) ?? [] });
       const filled: string[] = [], next: Draft = { ...now, details: { ...now.details } };
@@ -192,8 +198,22 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
   return (
     <Card className="enter">
       <Card.Header>
-        <Card.Title>{d.id ? "Edit record" : "Add a record"}</Card.Title>
+        <div className="flex items-start justify-between gap-3">
+          <Card.Title>{d.id ? "Edit record" : "Add a record"}</Card.Title>
+          {queue && (
+            <span className="shrink-0 text-sm text-muted tabular-nums" role="status">
+              Document <span className="font-medium text-foreground">{queue.at + 1}</span> of {queue.of}
+            </span>
+          )}
+        </div>
         {g && <Card.Description>{g.sub}</Card.Description>}
+        {queue && (
+          <div className="mt-1 flex gap-1" aria-hidden="true">
+            {Array.from({ length: queue.of }, (_, i) => (
+              <span key={i} className={`h-1 flex-1 rounded-full transition-colors duration-200 ${i < queue.at ? "bg-accent" : i === queue.at ? "bg-accent/45" : "bg-default"}`} />
+            ))}
+          </div>
+        )}
       </Card.Header>
       <Card.Content>
         <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
@@ -317,9 +337,10 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
             <SaveStatus dirty={dirty} busy={saving} saveLabel="Save changes" undoLabel="Cancel" onUndo={onCancel}
               idle={<Button size="sm" variant="tertiary" onPress={onCancel}>Close</Button>} />
           ) : (
-            <div className="flex gap-2">
-              <Button type="submit" variant="primary" isPending={saving}>Add</Button>
-              <Button variant="tertiary" onPress={onCancel}>Cancel</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" variant="primary" isPending={saving}>{queue && queue.at + 1 < queue.of ? "Add and next" : "Add"}</Button>
+              {queue && <Button variant="tertiary" onPress={queue.onSkip} isDisabled={saving}>Skip this one</Button>}
+              <Button variant="tertiary" onPress={onCancel}>{queue ? "Stop" : "Cancel"}</Button>
             </div>
           )}
         </form>
