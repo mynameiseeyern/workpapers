@@ -97,7 +97,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
 
   // ----- Reading the figures off an attached document (new records only). Fills empty boxes; never changes what's been typed. -----
   const [reading, setReading] = useState("");
-  const [read, setRead] = useState<{ file: File; filled: string[]; how: "text" | "ocr"; trouble?: string } | null>(null);
+  const [read, setRead] = useState<{ file: File; filled: string[]; how: "text" | "ocr"; trouble?: string; notes?: string[] } | null>(null);
   const latest = useRef(d);
   latest.current = d;
   const readFrom = async (file: File) => {
@@ -130,7 +130,12 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
         if (r.party && !now.party.trim()) { next.party = r.party; filled.push(`${now.section === "s05" && now.direction === "income" ? "Client" : "Supplier"}: ${r.party}`); }
       }
       setD(next);
-      setRead({ file, filled, how: doc.how });
+      // what the document itself says about how far its figures can be relied on
+      const notes: string[] = [];
+      if (r.kind === "payslip") notes.push("On a payslip the figures for that pay are used, not the year to date.");
+      if (r.kind === "income statement" && r.taxReady === false) notes.push("This income statement isn't marked Tax ready yet, so its figures may still change.");
+      if (r.leftOver?.length) notes.push(`Not entered, because there's no box for it here: ${r.leftOver.map((x) => `${x.label} ${formatMoney(x.cents)}`).join(", ")}. Add a note for the agent.`);
+      setRead({ file, filled, how: doc.how, notes });
       // beside the form on a wide screen, so each figure can be checked against the page
       if (filled.length && window.matchMedia("(min-width: 80rem)").matches) onView?.(file);
     } catch (err) {
@@ -339,7 +344,7 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                       {read.filled.length > 0
                         ? (read.how === "ocr" ? "This was read from a picture, so check every digit against the document before adding." : "Check each one against the document before adding.")
                         : !read.trouble && "The boxes can still be filled in by hand."}
-                      {read.filled.length > 0 && d.section === "i01" && " On a payslip the figures for that pay are used, not the year to date."}
+                      {read.notes?.map((n) => <span key={n} className="block">{n}</span>)}
                     </Alert.Description>
                   </Alert.Content>
                 </Alert>

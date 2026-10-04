@@ -21,6 +21,12 @@ export interface ReadFigures {
   details: Record<string, Cents>;
   /** What was read and the line it came from, so it can be shown back. */
   found: { field: string; cents?: Cents; text?: string; line: string }[];
+  /** For salary: whether this is the ATO's income statement or a payslip, when it can be told. */
+  kind?: "income statement" | "payslip";
+  /** An ATO income statement says whether its figures are final ("Tax ready") or may still change. */
+  taxReady?: boolean;
+  /** Amounts printed on the document that no box here takes, so they can be raised by hand. */
+  leftOver?: { label: string; cents: Cents }[];
 }
 export interface ReadOptions {
   section: SectionId;
@@ -76,10 +82,13 @@ function datesIn(text: string): string[] {
   for (let rest = text, d = firstDate(rest); d; rest = rest.slice(d.end), d = firstDate(rest)) out.push(d.date);
   return out;
 }
+/** "Period 01/07/2025 - 08/04/2026": the record is dated at the end of it, which keeps it in the year it belongs to. */
+const PERIOD = /\bperiod\b/i;
 const DATE_LABELS = [
   /payment date|date paid|paid on|date of payment/i,
   /(tax )?invoice date|date of issue|issue date|date issued|issued/i,
   /statement date|pay date|date of pay|pay(ment)? period end(ing)?|period end(ing)?/i,
+  PERIOD,
   /\bdate\b/i,
 ];
 
@@ -183,10 +192,25 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
   // ----- figures for the return schedules -----
   if (g) {
     const money = g.fields.filter((f) => f.t === "money");
-    const payslip: Payslip | undefined = opts.section === "i01"
+    if (opts.section === "i01") {
+      if (/income statements?/i.test(text) && /australian taxation office|\bpaygw\b|tax ready/i.test(text)) {
+        out.kind = "income statement";
+        const status = text.match(/\bstatus\b[^\n]*?\b(not\s+)?tax\s+ready\b/i);
+        if (status) out.taxReady = !status[1];
+      } else if (/pay\s?slip|pay advice|pay period|pay date|\bnet pay\b|\bytd\b|year[- ]to[- ]date/i.test(text)) out.kind = "payslip";
+    }
+    // An income statement is the whole year for one employer. Anything else in salary is read as a payslip: for the pay it covers.
+    const payslip: Payslip | undefined = opts.section === "i01" && out.kind !== "income statement"
       ? { ytdLastColumn: lines.some((l) => YTD_LAST_COLUMN.test(l) && !amountsIn(l).length) } : undefined;
     const labelsOf = (k: string, l: string) => [...(LABELS[opts.section]?.[k] ?? []), fromLabel(l)];
-    const take = (k: string, cents: Cents, line: string) => { if (!(k in out.details)) { out.details[k] = cents; out.found.push({ field: k, cents, line }); } };
+    // The first figure found for a box settles it. A printed $0.00 settles it too, and leaves an optional box empty.
+    const settled = new Set<string>();
+    const take = (k: string, cents: Cents, line: string) => {
+      if (settled.has(k)) return;
+      settled.add(k);
+      // nothing to enter for an optional box; a box that must be filled still gets its 0.00
+      if (cents > 0 || g.fields.find((f) => f.k === k)?.req) { out.details[k] = cents; out.found.push({ field: k, cents, line }); }
+    };
 
     // A row of headings with the figures on the row below: line them up in order.
     for (let i = 0; i < lines.length - 1; i++) {
@@ -226,7 +250,7 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
 
     // A label with its figure beside it.
     for (const f of money) {
-      if (f.k in out.details) continue;
+      if (settled.has(f.k)) continue;
       if (f.k === "amount") continue;   // a bare "Amount" box takes the document's total, below
       const skip = NOT_FROM[opts.section]?.[f.k];
       search: for (const label of labelsOf(f.k, f.l)) {
@@ -243,6 +267,17 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
   if (opts.section === "i01" && out.details["withheld"] != null && out.details["gross"] != null && out.details["withheld"] >= out.details["gross"]) {
     delete out.details["withheld"];
     out.found = out.found.filter((f) => f.field !== "withheld");
+  }
+
+  // An income statement can carry amounts this form has no box for. They're handed back so they aren't lost.
+  if (out.kind === "income statement") {
+    const left: { label: string; cents: Cents }[] = [];
+    for (const line of lines) {
+      const m = line.match(/^(lump sum payment [a-z]|community development employment projects)\b/i);
+      const a = m ? amountsIn(line) : [];
+      if (m && a.length && a[a.length - 1]!.cents > 0) left.push({ label: m[1]!.replace(/^./, (c) => c.toUpperCase()), cents: a[a.length - 1]!.cents });
+    }
+    if (left.length) out.leftOver = left;
   }
 
   // ----- the total and the GST, for invoices and receipts -----
@@ -282,7 +317,9 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
     for (let i = 0; i < lines.length; i++) {
       const m = lines[i]!.match(label);
       if (!m) continue;
-      let date = dateIn(lines[i]!.slice((m.index ?? 0) + m[0].length));
+      const rest = lines[i]!.slice((m.index ?? 0) + m[0].length);
+      let date = label === PERIOD ? datesIn(rest).pop() : dateIn(rest);
+      if (!date && label === PERIOD) continue;   // "Pay Period" as a heading: the pay date beside it is found by its own label
       if (!date && lines[i + 1]) {
         // A row of headings with the dates on the row below: count along to this heading's date. A "period" before it holds two.
         const before = lines[i]!.slice(0, m.index ?? 0), below = datesIn(lines[i + 1]!);
@@ -305,7 +342,8 @@ export function readFigures(text: string, opts: ReadOptions): ReadFigures {
       const line = lines[i]!;
       if (!/\b(pty\.?\s*ltd\.?|limited|ltd\.?|incorporated|inc\.?)(\s|$|,)/i.test(line)) continue;
       if (/bill(ed)? to|invoice to|ship to|sold to|customer|attention|attn/i.test(line) || /bill(ed)? to|invoice to|ship to|sold to|customer/i.test(lines[i - 1] ?? "")) continue;
-      const name = line.replace(/\babn\b.*$/i, "").replace(/[|•·].*$/, "").replace(/\s+\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\s*$/, "").trim();
+      const name = line.replace(/\babn\b.*$/i, "").replace(/[|•·].*$/, "").replace(/\s+\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\s*$/, "")
+        .replace(/\s*\((financial year|fy)\b[^)]*\)\s*$/i, "").trim();
       if (name.length >= 3 && name.length <= 70 && !amountsIn(name).length) { out.party = name; out.found.push({ field: "party", text: name, line }); break; }
     }
   }

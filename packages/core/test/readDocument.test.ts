@@ -30,7 +30,7 @@ describe("readFigures", () => {
       Franking credits: $115.20
       TFN withholding tax: $0.00`;
     const r = readFigures(text, { section: "i11", known: ["Harbourline Property Trust", "Coastal Mutual"] });
-    expect(r.details).toEqual({ unfranked: 0, franked: 26880, credit: 11520, withheld: 0 });
+    expect(r.details).toEqual({ franked: 26880, credit: 11520 });   // a printed $0.00 leaves an optional box empty
     expect(r.date).toBe("2026-07-21");
     expect(r.party).toBe("Coastal Mutual");
   });
@@ -43,7 +43,7 @@ describe("readFigures", () => {
       Total interest paid   $1,250.00
       TFN withholding tax   $0.00`;
     const r = readFigures(text, { section: "i10" });
-    expect(r.details).toEqual({ gross: 125000, withheld: 0 });
+    expect(r.details).toEqual({ gross: 125000 });
     expect(r.date).toBe("2026-06-30");
     expect(r.party).toBe("Harbourline Savings Pty Ltd");
   });
@@ -83,6 +83,71 @@ describe("readFigures", () => {
     expect(r.gst).toBe(500);
     expect(r.date).toBe("2026-09-02");
     expect(r.party).toBe("Example Hardware");
+  });
+
+  // The ATO income statement, as printed from myGov. Every name and figure here is made up.
+  const incomeStatement = (over: { status?: string; lumpA?: string } = {}) => `
+      10/2/26, 10:51 PM Print | Australian Taxation Office
+      Name SAM SAMPLE
+      Australian Government ABN 00 000 000 000
+      Australian Taxation Office
+      Income statements
+      EXAMPLE EMPLOYER PTY LTD (Financial year 2025-26)
+      Status ${over.status ?? "Tax ready"}
+      Employee number 000-123
+      Branch 001
+      Employer ABN/Branch 00 000 000 000 / 001
+      BMS ID EXAMPLE_0000-1000-0000
+      Period 01/07/2025 - 08/04/2026
+      Reported Date 15/07/2026
+      Income
+      Salary and wages
+      Gross amount $60,000.00
+      Bonuses and commissions $2,000.00
+      Leave payment type Other paid leave
+      Paid leave amount $3,000.00
+      Salary sacrifice type Superannuation
+      Salary sacrifice amount -$5,000.00
+      Total gross amount $60,000.00
+      Tax withheld or foreign tax paid
+      Salary and wages
+      PAYGW amount $14,000.00
+      Lump sum amounts
+      Lump sum payment A ${over.lumpA ?? "$0.00"}
+      Lump sum payment B $0.00
+      Allowances
+      about:blank 112
+      10/2/26, 10:51 PM Print | Australian Taxation Office
+      Deductions
+      Total $0.00
+      Employer reported super
+      Employer superannuation contribution liability $7,800.00
+      Where you have an entitlement to super contributions your employer must pay super into your fund at
+      least quarterly. Check your super fund for payments made by your employer.
+      Other amounts
+      Reportable Employer Super Contribution $5,000.00
+      Community Development Employment Projects $0.00
+      payments
+      Reportable fringe benefits - total $0.00`;
+
+  it("reads an ATO income statement: the year's figures for one employer", () => {
+    const r = readFigures(incomeStatement(), { section: "i01" });
+    // total gross (after salary sacrifice), the tax withheld, reportable super and the employer's own super; nothing for the $0.00 lines
+    expect(r.details).toEqual({ gross: 6000000, withheld: 1400000, resc: 500000, sg: 780000 });
+    expect(r.party).toBe("EXAMPLE EMPLOYER PTY LTD");
+    expect(r.kind).toBe("income statement");
+    expect(r.taxReady).toBe(true);
+    expect(r.leftOver).toBeUndefined();
+  });
+
+  it("dates an income statement at the end of its period, so one reported in July stays in the year it is for", () => {
+    expect(readFigures(incomeStatement(), { section: "i01" }).date).toBe("2026-04-08");
+  });
+
+  it("says when an income statement isn't tax ready, and hands back amounts it has no box for", () => {
+    const r = readFigures(incomeStatement({ status: "Not tax ready", lumpA: "$4,200.00" }), { section: "i01" });
+    expect(r.taxReady).toBe(false);
+    expect(r.leftOver).toEqual([{ label: "Lump sum payment A", cents: 420000 }]);
   });
 
   it("reads a payslip for the pay it covers, not the year to date, so each payslip can be its own record", () => {
@@ -137,6 +202,7 @@ describe("readFigures", () => {
     expect(r.details.withheld).toBe(170000);    // the Tax column, not net pay and not the year to date
     expect(r.details.resc).toBe(50000);
     expect(r.details.sg).toBe(96000);
+    expect(r.kind).toBe("payslip");
     expect(r.date).toBe("2026-08-20");          // the pay date, not the start of the pay period
     expect(r.party).toBe("EXAMPLE EMPLOYER PTY LTD");
   });

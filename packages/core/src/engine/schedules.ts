@@ -53,7 +53,7 @@ export const CAR_CAP_KM = 5000;
 export const SCHEDULES: Record<string, Schedule> = {
   i01: {
     id: "i01", shared: false, dateLabel: "Statement date", doc: "income statement",
-    sub: "One line per payslip as the year goes, or one line per employer from the income statement in myGov. Not both for the same job: the income statement already counts every payslip.",
+    sub: "One line per employer, from the ATO income statement in myGov: those are the figures the return goes by. A payslip can stand in during the year, but not alongside the income statement for the same job.",
     fields: [
       { k: "party", l: "Employer", t: "text", req: true }, { k: "gross", l: "Gross payments", t: "money", req: true },
       { k: "withheld", l: "Tax withheld", t: "money" }, { k: "allow", l: "Allowances (item 2)", t: "money" },
