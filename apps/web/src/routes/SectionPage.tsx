@@ -53,6 +53,9 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
     if (row) viewSaved(row, f);
   };
   const [saving, setSaving] = useState(false);
+  // "Add from a document": pick a statement, invoice or payslip and the form opens with it attached and its figures read
+  const picker = useRef<HTMLInputElement>(null);
+  const canAttach = section !== "s07a" && section !== "s08";
   // the record just added or changed is marked in the list for a moment, so you can see where it landed
   const [justSaved, setJustSaved] = useState("");
   const settle = useRef<number | undefined>(undefined);
@@ -114,7 +117,16 @@ export function SectionPage({ e, loaded, section, scope, person, years }: Props)
         <Card.Content className="flex flex-col gap-4">
           <SectionTotals e={e} section={section} scope={scope} />
           {editable && !draft && (
-            <div><Button variant="primary" onPress={() => setDraft(blankDraft(section, defaultOwner, defaultDate()))}>Add a record</Button></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="primary" onPress={() => setDraft(blankDraft(section, defaultOwner, defaultDate()))}>Add a record</Button>
+              {canAttach && (
+                <>
+                  <input ref={picker} type="file" accept="application/pdf,image/*" className="hidden"
+                    onChange={(ev) => { const f = ev.target.files?.[0]; ev.target.value = ""; if (f) setDraft({ ...blankDraft(section, defaultOwner, defaultDate()), newFiles: [f] }); }} />
+                  <Button variant="secondary" onPress={() => picker.current?.click()}>Add from a document</Button>
+                </>
+              )}
+            </div>
           )}
         </Card.Content>
       </Card>

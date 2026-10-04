@@ -1,6 +1,6 @@
-import { Button, Card, Checkbox, ComboBox, Description, FieldError, Input, Label, ListBox, Select, TextArea, TextField } from "@heroui/react";
-import { BIZ_CATS, formatMoney, SCHEDULES, toCents, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
-import { useRef, useState, type ReactNode } from "react";
+import { Alert, Button, Card, Checkbox, ComboBox, Description, FieldError, Input, Label, ListBox, Select, Spinner, TextArea, TextField } from "@heroui/react";
+import { BIZ_CATS, formatMoney, readFigures, SCHEDULES, toCents, WORK_CATS, type Field, type SectionId } from "@workpapers/core";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SaveStatus } from "../components/SaveStatus";
 import { useSwapClass } from "../ui/motion";
 import { fileLabel, SHARED, validate, type Draft } from "../data/rowsApi";
@@ -87,6 +87,61 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
   const fileInput = useRef<HTMLInputElement>(null);
   const arrive = useSwapClass();   // boxes that appear after a choice fade in; nothing fades just because the form opened
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
+
+  // ----- Reading the figures off an attached document (new records only). Fills empty boxes; never changes what's been typed. -----
+  const [reading, setReading] = useState("");
+  const [read, setRead] = useState<{ file: File; filled: string[]; how: "text" | "ocr"; trouble?: string } | null>(null);
+  const latest = useRef(d);
+  latest.current = d;
+  const readFrom = async (file: File) => {
+    setRead(null);
+    try {
+      const { canRead, documentText } = await import("../data/documentText");
+      if (!canRead(file)) return setRead({ file, filled: [], how: "text", trouble: "This kind of file can't be read. A PDF, JPG or PNG can." });
+      const doc = await documentText(file, setReading);
+      const now = latest.current, sched = SCHEDULES[now.section];
+      const r = readFigures(doc.text, { section: now.section, known: sched ? usedBefore?.("details.party") ?? [] : usedBefore?.("party", now.direction) ?? [] });
+      const filled: string[] = [], next: Draft = { ...now, details: { ...now.details } };
+      const dollars = (c: number) => (c / 100).toFixed(2);
+      const fyOf = (x: string) => (Number(x.slice(5, 7)) >= 7 ? Number(x.slice(0, 4)) + 1 : Number(x.slice(0, 4)));
+      const shown = (x: string) => new Date(`${x}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+      // the date box starts on a default, so the document's date replaces it unless it has been changed by hand
+      if (r.date && now.date === draft.date && years.includes(fyOf(r.date))) {
+        if (now.paid === now.date) next.paid = r.date;
+        next.date = r.date; filled.push(`Date ${shown(r.date)}`);
+      }
+      if (sched) {
+        for (const f of sched.fields) {
+          const empty = !String(now.details[f.k] ?? "").trim();
+          if (f.t === "money" && r.details[f.k] != null && empty) { next.details[f.k] = dollars(r.details[f.k]!); filled.push(`${f.l} ${formatMoney(r.details[f.k]!)}`); }
+          if (f.k === "party" && r.party && empty) { next.details[f.k] = r.party; filled.push(`${f.l}: ${r.party}`); }
+        }
+      } else {
+        if (r.amount != null && !now.amount.trim()) { next.amount = dollars(r.amount); filled.push(`Amount ${formatMoney(r.amount)}`); }
+        if (r.gst != null && !now.gst.trim() && !now.noGst) { next.gst = dollars(r.gst); gstTouched.current = true; filled.push(`GST ${formatMoney(r.gst)}`); }
+        if (r.party && !now.party.trim()) { next.party = r.party; filled.push(`${now.section === "s05" && now.direction === "income" ? "Client" : "Supplier"}: ${r.party}`); }
+      }
+      setD(next);
+      setRead({ file, filled, how: doc.how });
+      // beside the form on a wide screen, so each figure can be checked against the page
+      if (filled.length && window.matchMedia("(min-width: 80rem)").matches) onView?.(file);
+    } catch (err) {
+      console.warn("Couldn't read the document", err);
+      setRead({ file, filled: [], how: "text", trouble: "Couldn't read this file. The boxes can still be filled in by hand." });
+    } finally { setReading(""); }
+  };
+  const attach = (files: File[]) => {
+    if (!files.length) return;
+    set("newFiles", [...d.newFiles, ...files]);
+    if (!d.id) void readFrom(files[0]!);
+  };
+  // "Add from a document" opens the form with the file already attached
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
+    if (!draft.id && draft.newFiles[0]) void readFrom(draft.newFiles[0]);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const setDetail = (k: string, v: string | boolean) => setD((x) => ({ ...x, details: { ...x.details, [k]: v } }));
   const g = SCHEDULES[d.section];
   const owners = ownerOptions(d.section, people);
@@ -230,9 +285,27 @@ export function EntryForm({ draft, people, years, gstRegistered, saving, onSave,
                   ))}
                 </ul>
               )}
+              {reading && <p className="flex items-center gap-2 text-sm text-muted" role="status"><Spinner size="sm" />{reading}</p>}
+              {read && !reading && (
+                <Alert status={read.trouble || !read.filled.length ? "warning" : "accent"} className="enter">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Title>
+                      {read.trouble ?? (read.filled.length ? `Filled in from ${read.file.name}` : `Couldn't find any figures in ${read.file.name}`)}
+                    </Alert.Title>
+                    <Alert.Description>
+                      {read.filled.length > 0 && <span className="block">{read.filled.join(" · ")}</span>}
+                      {read.filled.length > 0
+                        ? (read.how === "ocr" ? "This was read from a picture, so check every digit against the document before adding." : "Check each one against the document before adding.")
+                        : !read.trouble && "The boxes can still be filled in by hand."}
+                      {read.filled.length > 0 && d.section === "i01" && " On a payslip the year-to-date column is used."}
+                    </Alert.Description>
+                  </Alert.Content>
+                </Alert>
+              )}
               <div className="flex flex-wrap items-center gap-3">
                 <input ref={fileInput} type="file" multiple accept="application/pdf,image/*" className="hidden"
-                  onChange={(e) => { set("newFiles", [...d.newFiles, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} />
+                  onChange={(e) => { attach(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
                 <Button size="sm" variant="secondary" onPress={() => fileInput.current?.click()}>Attach receipt or statement</Button>
                 <Tick label="I have it on paper / elsewhere" checked={d.evidenceTick} onChange={(v) => set("evidenceTick", v)} />
               </div>

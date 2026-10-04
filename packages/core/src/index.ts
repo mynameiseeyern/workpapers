@@ -9,3 +9,4 @@ export * from "./engine/engine";
 export * from "./example/exampleYear";
 export * from "./locks/lockcore";
 export * from "./engine/readiness";
+export * from "./read/readDocument";

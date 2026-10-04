@@ -17,12 +17,16 @@
     "@heroui/styles": "3.2.6",
     "@internationalized/date": "3.12.4",
     "@tanstack/react-query": "5.103.2",
+    "@tesseract.js-data/eng": "1.0.0",
     "@workpapers/core": "workspace:*",
     "agentation": "3.1.2",
+    "pdfjs-dist": "6.4.299",
     "pocketbase": "0.28.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "tailwind-variants": "3.3.1"
+    "tailwind-variants": "3.3.1",
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
