@@ -35,7 +35,7 @@ export function AppShell(p: Props) {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-separator bg-surface px-5 py-2.5">
-        <h1 className="text-base font-semibold">Workpapers</h1>
+        <h1 className="display text-xl">Workpapers</h1>
         <span className="flex-1" />
         <Tabs selectedKey={p.person} onSelectionChange={(k) => p.onPerson(String(k))}>
           <Tabs.ListContainer>

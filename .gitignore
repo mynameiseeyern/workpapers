@@ -5,3 +5,5 @@ pb_data
 *.log
 .DS_Store
 coverage
+# Timeless font files: licensed for use in the app, not for a public repository (see docs/FONTS.md)
+apps/web/public/fonts/timeless/

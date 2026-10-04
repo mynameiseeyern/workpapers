@@ -162,7 +162,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
   return (
     <div className="min-w-[8rem]">
       <div className="text-xs text-muted">{label}</div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
+      <div className="display mt-0.5 text-2xl">{value}</div>
       {note && <div className="text-xs text-muted">{note}</div>}
     </div>
   );

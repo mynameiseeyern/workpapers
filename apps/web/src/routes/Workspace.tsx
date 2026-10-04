@@ -57,12 +57,12 @@ export function Workspace(p: Props) {
   const s = sectionById(p.view);
   const title = (
     <div>
-      <h2 className="text-xl font-semibold">
+      <h2 className="display text-[1.75rem]">
         {s?.name ?? "Not found"}
-        {s?.code && <span className="ml-2 align-middle text-xs font-normal text-muted">{s.code}</span>}
-        {p.person !== "Household" && <span className="font-normal text-muted"> — {p.person}</span>}
+        {p.person !== "Household" && <span className="text-muted">, {p.person}</span>}
+        {s?.code && <span className="ml-2 align-middle font-sans text-xs font-normal tracking-normal text-muted">{s.code}</span>}
       </h2>
-      <p className="text-sm text-muted">{fyLabel(p.fy)}</p>
+      <p className="mt-1 text-sm text-muted">{fyLabel(p.fy)}</p>
     </div>
   );
   if (p.loading) return <div className="flex max-w-4xl flex-col gap-4">{title}<Spinner /></div>;

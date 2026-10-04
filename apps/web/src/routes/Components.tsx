@@ -89,9 +89,9 @@ export function Components() {
             <p className="text-xs text-muted">Caption for help and secondary detail.</p>
           </div>
           <div className="flex flex-col gap-2">
-            <span className="text-3xl font-semibold tracking-tight tabular-nums">$84,310.00</span>
-            <span className="text-xl font-semibold tabular-nums">$12,450.75</span>
-            <span className="text-sm"><span className="figure">$1,250.00</span> <span className="text-muted">in tables and lists, a monospaced face keeps columns lined up</span></span>
+            <span className="display text-4xl">$84,310.00</span>
+            <span className="display text-2xl">$12,450.75</span>
+            <span className="text-sm"><span className="figure">$1,250.00</span> <span className="text-muted">in tables and lists, digits of one width keep columns lined up</span></span>
           </div>
         </div>
       </Block>

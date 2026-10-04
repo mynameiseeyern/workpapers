@@ -24,7 +24,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     <main className="flex min-h-full flex-col items-center justify-center p-4">
       <Card className="enter w-full max-w-sm">
         <Card.Header>
-          <Card.Title>Workpapers</Card.Title>
+          <Card.Title className="display text-2xl">Workpapers</Card.Title>
           <Card.Description>Sign in to the household workpapers.</Card.Description>
         </Card.Header>
         <Card.Content>

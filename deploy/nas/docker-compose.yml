@@ -30,4 +30,5 @@ services:
     user: "0:0"                         # write to the NAS folder without fiddling with DSM permissions
     volumes:
       - /volume1/docker/workpapers/pb_data:/pb/pb_data
+      - /volume1/docker/workpapers/fonts:/pb/pb_public/fonts/timeless:ro   # the Timeless font files; the folder must exist first (README: Fonts)
     restart: unless-stopped

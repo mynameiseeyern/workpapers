@@ -7,7 +7,7 @@ export function PageHeader(p: { title: string; code?: string; who?: string; subt
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <Typography.Heading level={3}>
+        <Typography.Heading level={3} className="display font-normal">
           {p.title}
           {p.who && <span className="font-normal text-muted">, {p.who}</span>}
           {p.code && <span className="ml-2 align-middle text-xs font-normal tracking-normal text-muted">{p.code}</span>}
@@ -44,7 +44,7 @@ export function Stat(p: { label: string; value: ReactNode; note?: ReactNode; lea
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-xs text-muted">{p.label}</span>
-      <span className={`font-semibold tracking-tight tabular-nums ${p.lead ? "text-3xl" : "text-xl"}`}>{p.value}</span>
+      <span className={`display ${p.lead ? "text-4xl" : "text-2xl"}`}>{p.value}</span>
       {p.note && <span className="text-xs text-muted">{p.note}</span>}
     </div>
   );

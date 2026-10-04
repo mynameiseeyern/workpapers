@@ -4,15 +4,39 @@
  * Shape rule (one system, used everywhere):
  *   controls (buttons, fields, toggles) 8px, containers (cards, tables, panels) 12px, status chips stay pills.
  * Colour rule: neutral greys with a faint green cast, one accent (deep green), status colours only for status.
- * Type: Geist for text, Geist Mono for money so columns of figures line up.
+ *
+ * Type: the Timeless family (timeless.co). One rule, used everywhere:
+ *   Timeless Sans for everything that is read, pressed or typed, with tabular figures wherever numbers sit in a column.
+ *   Timeless Serif only for what a page is about: its title, its headline figures, and the name of the app (class .display).
+ *
+ * The font files are NOT in this repository: their licence allows embedding them in the app but not putting them in
+ * a public repository. On a working copy they sit in apps/web/public/fonts/timeless (ignored by git); on the NAS that
+ * folder is mounted into the running app (deploy/nas/README.md). Where the files are missing the app falls back to
+ * Geist for both, so nothing breaks.
  */
 @import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
+
+@font-face {
+  font-family: "Timeless Sans"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fonts/timeless/TimelessSansVF.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Timeless Serif"; font-style: normal; font-weight: 200 700; font-display: swap;
+  src: url("/fonts/timeless/TimelessSerifVF.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Timeless Serif"; font-style: italic; font-weight: 300 700; font-display: swap;
+  src: url("/fonts/timeless/TimelessSerifItalicVF.woff2") format("woff2");
+}
 
 @theme {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  --font-sans: "Timeless Sans", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Timeless Serif", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Timeless Sans draws its Regular at 420, a touch firmer than 400 */
+  --font-weight-normal: 420;
 }
+html { font-weight: 420; }
 
 :root {
   --radius: 0.25rem;              /* cards and tables land on 12px */
@@ -47,5 +71,11 @@
 /* Buttons and toggles follow the 8px control radius instead of the stock pill. */
 .button, .toggle-button { border-radius: calc(var(--radius) * 2); }
 
-/* Money and other figures: monospaced digits that line up in columns. */
-.figure { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+/* Money and other figures in tables, lists and boxes: the same face as the text, with digits of one width so columns line up. */
+.figure { font-family: var(--font-sans); font-variant-numeric: tabular-nums lining-nums; }
+
+/* The serif voice: a page's title, its headline figures, the name of the app. Nothing that is pressed or typed. */
+.display {
+  font-family: var(--font-serif); font-weight: 400; letter-spacing: -0.012em; line-height: 1.12;
+  font-variant-numeric: lining-nums proportional-nums;
+}

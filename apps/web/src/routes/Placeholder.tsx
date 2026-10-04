@@ -11,12 +11,12 @@ export function Placeholder({ view, fy, person }: { view: string; fy: number; pe
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <div>
-        <h2 className="text-xl font-semibold">
+        <h2 className="display text-[1.75rem]">
           {s?.name ?? "Not found"}
-          {s?.code && <span className="ml-2 align-middle text-xs font-normal text-muted">{s.code}</span>}
-          {person !== "Household" && <span className="font-normal text-muted"> — {person}</span>}
+          {person !== "Household" && <span className="text-muted">, {person}</span>}
+          {s?.code && <span className="ml-2 align-middle font-sans text-xs font-normal tracking-normal text-muted">{s.code}</span>}
         </h2>
-        <p className="text-sm text-muted">{fyLabel(fy)}</p>
+        <p className="mt-1 text-sm text-muted">{fyLabel(fy)}</p>
       </div>
       <Card>
         <Card.Header>
